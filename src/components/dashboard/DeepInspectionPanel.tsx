@@ -1,10 +1,10 @@
-'use client';
-
+import { useState } from 'react';
 import { useSeismosStore } from '@/lib/store';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import FFTDisplay from '../visualizations/FFTDisplay';
 import ValidationHUD from './ValidationHUD';
+import SystemInfoModal from '../modals/SystemInfoModal';
 
 const HEALTH_CONFIG: Record<string, { color: string; label: string; icon: string }> = {
     optimal: { color: '#16a34a', label: 'NORMAL', icon: '●' },
@@ -13,6 +13,7 @@ const HEALTH_CONFIG: Record<string, { color: string; label: string; icon: string
 };
 
 export default function DeepInspectionPanel() {
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const {
         selectedNodeId,
         nodes,
@@ -35,11 +36,15 @@ export default function DeepInspectionPanel() {
             <div className="p-6 border-b border-border bg-white shrink-0">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white shadow-sm">
+                        <button
+                            onClick={() => setShowInfoModal(true)}
+                            className="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white shadow-sm hover:bg-cyan-700 transition-colors"
+                            title="Sistem Mimarisi ve INSD Bilgisi"
+                        >
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M2 12h4l3-9 3 18 3-9h4" />
                             </svg>
-                        </div>
+                        </button>
                         <h1 className="font-mono text-xl font-black tracking-tight text-gray-900 leading-none">SEISMOS</h1>
                     </div>
                     <Badge
@@ -50,6 +55,8 @@ export default function DeepInspectionPanel() {
                     </Badge>
                 </div>
             </div>
+
+            <SystemInfoModal isOpen={showInfoModal} onClose={() => setShowInfoModal(false)} />
 
             <div className="flex-1 overflow-y-auto bg-background">
                 {!node ? (

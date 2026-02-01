@@ -1,4 +1,4 @@
-export type NodeStatus = 'stable' | 'anomaly' | 'warning' | 'critical';
+export type NodeStatus = 'stable' | 'anomaly' | 'warning' | 'critical' | 'collapse';
 
 export interface Node {
   id: string;

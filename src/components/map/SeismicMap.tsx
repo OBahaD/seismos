@@ -13,6 +13,7 @@ const STATUS_COLORS: Record<NodeStatus, string> = {
     anomaly: '#eab308',
     warning: '#f97316',
     critical: '#ef4444',
+    collapse: '#581c87', // Purple-900 for collapse
 };
 
 const STATUS_PULSE_DURATION: Record<NodeStatus, number> = {
@@ -20,6 +21,7 @@ const STATUS_PULSE_DURATION: Record<NodeStatus, number> = {
     anomaly: 2000,
     warning: 1000,
     critical: 500,
+    collapse: 200, // Very fast pulse for collapse
 };
 
 // Create custom pulsing marker SVG

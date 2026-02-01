@@ -151,11 +151,55 @@ export const useSeismosStore = create<SeismosState>((set) => ({
         const now = Date.now();
         const newSignalLoss = new Set<string>();
 
+        // INSD Logic Implementation
+        // Channel 1: Correlation Gap (Event detected by neighbors)
+        // Channel 2: Heartbeat Loss (Handled by SIGNAL_LOSS_THRESHOLD)
+        // Channel 3: Neighborhood Anomaly (Neighbor status check)
+
+        const updatedNodes = new Map(state.nodes);
+        let hasStatusUpdates = false;
+
         state.lastUpdateTimes.forEach((lastUpdate, nodeId) => {
             if (now - lastUpdate > SIGNAL_LOSS_THRESHOLD) {
                 newSignalLoss.add(nodeId);
+
+                // Check neighbors for INSD
+                // In a real system, we'd use geospatial distance. 
+                // For this simulation, we'll check the global state of other nodes as "neighbors"
+                let criticalNeighbors = 0;
+                let activeNeighbors = 0;
+
+                state.nodes.forEach((neighbor) => {
+                    if (neighbor.id !== nodeId && !newSignalLoss.has(neighbor.id)) {
+                        activeNeighbors++;
+                        if (neighbor.status === 'critical' || neighbor.status === 'warning') {
+                            criticalNeighbors++;
+                        }
+                    }
+                });
+
+                // INSD Decision Rule:
+                // IF (Topluluğun %30'undan fazlası veya en az 3 komşu kritik durumdaysa)
+                // VE (Hedef Node Suskunsa)
+                // THEN (Olası Yıkım)
+                const isCollapseProbable = criticalNeighbors >= 3 || (activeNeighbors > 0 && (criticalNeighbors / activeNeighbors) > 0.3);
+
+                const currentNode = updatedNodes.get(nodeId);
+                if (currentNode) {
+                    if (isCollapseProbable && currentNode.status !== 'collapse') {
+                        updatedNodes.set(nodeId, { ...currentNode, status: 'collapse' });
+                        hasStatusUpdates = true;
+                    } else if (!isCollapseProbable && currentNode.status !== 'stable' && !hasStatusUpdates) {
+                        // Reset to stable if it was just signal loss without collapse context
+                        // (Optional, maybe keep last known state)
+                    }
+                }
             }
         });
+
+        if (hasStatusUpdates) {
+            return { signalLossNodes: newSignalLoss, nodes: updatedNodes };
+        }
 
         return { signalLossNodes: newSignalLoss };
     }),
