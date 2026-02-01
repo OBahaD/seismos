@@ -1,7 +1,4 @@
-'use client';
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 interface SystemInfoModalProps {
@@ -12,21 +9,25 @@ interface SystemInfoModalProps {
 export default function SystemInfoModal({ isOpen, onClose }: SystemInfoModalProps) {
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col bg-white">
-                <DialogHeader className="p-0">
-                    <DialogTitle className="text-xl font-mono font-bold flex items-center gap-2 text-gray-900">
-                        <span className="w-6 h-6 rounded bg-cyan-600 flex items-center justify-center text-white text-xs">i</span>
-                        SİSTEM MİMARİSİ VE INSD MANTIĞI
-                    </DialogTitle>
-                    <DialogDescription className="text-gray-500">
-                        Seismos Dağıtık Algılama ve Karar Destek Sistemi
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="max-w-3xl max-h-[85vh] w-[90vw] overflow-hidden flex flex-col bg-white p-0 gap-0">
+                <div className="p-6 pb-2 shrink-0">
+                    <DialogHeader className="p-0 space-y-2">
+                        <DialogTitle className="text-xl font-mono font-bold flex items-center gap-2 text-gray-900">
+                            <span className="w-6 h-6 rounded bg-cyan-600 flex items-center justify-center text-white text-xs">i</span>
+                            SİSTEM MİMARİSİ VE INSD MANTIĞI
+                        </DialogTitle>
+                        <DialogDescription className="text-gray-500">
+                            Seismos Dağıtık Algılama ve Karar Destek Sistemi
+                        </DialogDescription>
+                    </DialogHeader>
+                </div>
 
-                <Separator />
+                <div className="px-6 shrink-0">
+                    <Separator />
+                </div>
 
-                <ScrollArea className="flex-1 pr-4">
-                    <div className="space-y-6 py-4">
+                <div className="flex-1 overflow-y-auto p-6 min-h-0">
+                    <div className="space-y-6">
 
                         {/* INSD Section */}
                         <section className="space-y-3">
@@ -83,9 +84,9 @@ export default function SystemInfoModal({ isOpen, onClose }: SystemInfoModalProp
                         </section>
 
                     </div>
-                </ScrollArea>
+                </div>
 
-                <div className="pt-4 mt-auto border-t border-gray-100 flex justify-end">
+                <div className="p-6 pt-2 mt-auto border-t border-gray-100 flex justify-end bg-gray-50/50 shrink-0">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 text-sm font-medium transition-colors"
