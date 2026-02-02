@@ -10,13 +10,14 @@ export default function DashboardPanel() {
     const {
         selectedNodeId,
         nodes,
-        processedResults,
+        buildingDamages,
         selectNode,
         buildingSummary,
         isEarthquakeActive,
         earthquakeProgress,
         setEarthquakeActive,
         setEarthquakeProgress,
+        applyEarthquakeDamage,
         updateBuildingSummary,
         resetToSafe,
     } = useSeismosStore();
@@ -25,15 +26,15 @@ export default function DashboardPanel() {
     const [activeFilter, setActiveFilter] = useState<CategoryFilter>(null);
 
     const node = selectedNodeId ? nodes.get(selectedNodeId) : null;
-    const result = selectedNodeId ? processedResults.get(selectedNodeId) : null;
+    const damage = selectedNodeId ? buildingDamages.get(selectedNodeId) : null;
 
     // Filtrelenmiş bina listesi
     const getFilteredBuildings = () => {
         const buildings: Array<{ id: string; name: string; score: number }> = [];
 
         nodes.forEach((n, id) => {
-            const r = processedResults.get(id);
-            const score = r?.damageScore?.score || 0;
+            const d = buildingDamages.get(id);
+            const score = d?.totalScore || 0;
 
             let category: CategoryFilter = 'safe';
             if (score >= 90) category = 'collapsed';
@@ -59,15 +60,16 @@ export default function DashboardPanel() {
         earthquakeSimulator.triggerEarthquake(
             {
                 intensity: 1.5 + Math.random() * 0.5,
-                durationMs: 6000,
+                durationMs: 5000,
                 epicenterLat: epicenter.lat,
                 epicenterLng: epicenter.lng,
             },
             (progress) => setEarthquakeProgress(progress),
-            () => {
+            (damages) => {
+                applyEarthquakeDamage(damages);
                 setEarthquakeActive(false);
                 updateBuildingSummary();
-                setTimeout(() => setCanReset(true), 2000);
+                setTimeout(() => setCanReset(true), 1000);
             }
         );
     };
@@ -142,10 +144,10 @@ export default function DashboardPanel() {
                 )}
             </div>
 
-            {/* Özet - Tıklanabilir */}
+            {/* Özet */}
             <div className="p-4 border-b border-slate-800">
                 <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-3">
-                    Bina Durumu {activeFilter && <span className="text-slate-400">• Listeyi görmek için tıkla</span>}
+                    Bina Durumu
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
                     <button
@@ -191,9 +193,8 @@ export default function DashboardPanel() {
                 </div>
             </div>
 
-            {/* İçerik Alanı */}
+            {/* İçerik */}
             <div className="flex-1 overflow-y-auto p-4">
-                {/* Filtre aktifse bina listesi */}
                 {activeFilter && filteredBuildings.length > 0 ? (
                     <div className="space-y-2">
                         <div className="flex items-center justify-between mb-2">
@@ -236,8 +237,7 @@ export default function DashboardPanel() {
                             Geri dön
                         </button>
                     </div>
-                ) : node ? (
-                    /* Seçili Bina Detayı */
+                ) : node && damage ? (
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -254,31 +254,41 @@ export default function DashboardPanel() {
                             </button>
                         </div>
 
-                        {result?.damageScore && (
-                            <div className={`rounded-xl p-4 ${getScoreColor(result.damageScore.score).bg}/10 border ${getScoreColor(result.damageScore.score).bg}/20`}>
-                                <div className="flex items-end justify-between mb-2">
-                                    <div>
-                                        <div className="text-xs text-slate-500 mb-1">Hasar Skoru</div>
-                                        <div className={`text-4xl font-bold ${getScoreColor(result.damageScore.score).text}`}>
-                                            {result.damageScore.score}
-                                            <span className="text-lg text-slate-500">/100</span>
-                                        </div>
-                                    </div>
-                                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(result.damageScore.score).bg}/20 ${getScoreColor(result.damageScore.score).text}`}>
-                                        {getScoreColor(result.damageScore.score).label}
+                        {/* Hasar Skoru */}
+                        <div className={`rounded-xl p-4 ${getScoreColor(damage.totalScore).bg}/10 border ${getScoreColor(damage.totalScore).bg}/20`}>
+                            <div className="flex items-end justify-between mb-3">
+                                <div>
+                                    <div className="text-xs text-slate-500 mb-1">Toplam Hasar</div>
+                                    <div className={`text-4xl font-bold ${getScoreColor(damage.totalScore).text}`}>
+                                        {damage.totalScore}
+                                        <span className="text-lg text-slate-500">/100</span>
                                     </div>
                                 </div>
-                                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full ${getScoreColor(result.damageScore.score).bg} transition-all`}
-                                        style={{ width: `${result.damageScore.score}%` }}
-                                    />
+                                <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(damage.totalScore).bg}/20 ${getScoreColor(damage.totalScore).text}`}>
+                                    {getScoreColor(damage.totalScore).label}
                                 </div>
                             </div>
-                        )}
+                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
+                                <div
+                                    className={`h-full ${getScoreColor(damage.totalScore).bg} transition-all`}
+                                    style={{ width: `${damage.totalScore}%` }}
+                                />
+                            </div>
+
+                            {/* Detay */}
+                            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700">
+                                <div>
+                                    <div className="text-xs text-slate-500">Baz Skor</div>
+                                    <div className="text-lg font-semibold text-slate-300">{damage.baseScore}</div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-500">Deprem Hasarı</div>
+                                    <div className="text-lg font-semibold text-red-400">+{damage.earthquakeDamage}</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 ) : (
-                    /* Boş Durum */
                     <div className="h-full flex items-center justify-center">
                         <div className="text-center">
                             <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-3">

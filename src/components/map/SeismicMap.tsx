@@ -4,20 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSeismosStore } from '@/lib/store';
-import type { NodeStatus } from '@/lib/supabase/types';
 
-// Renk paleti
-const STATUS_COLORS: Record<string, string> = {
-    stable: '#10b981',   // Yeşil
-    safe: '#10b981',
-    anomaly: '#eab308',  // Sarı
-    damaged: '#eab308',
-    warning: '#f97316',  // Turuncu
-    critical: '#ef4444', // Kırmızı
-    collapse: '#dc2626', // Koyu kırmızı
-};
-
-// Skor'a göre renk
+// Skora göre renk
 function getColorByScore(score: number): string {
     if (score >= 90) return '#dc2626'; // Yıkılmış
     if (score >= 70) return '#f97316'; // Ağır hasarlı
@@ -30,7 +18,7 @@ export default function SeismicMap() {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<Map<string, L.CircleMarker | L.Marker>>(new Map());
 
-    const { nodes, selectedNodeId, selectNode, processedResults, isEarthquakeActive } = useSeismosStore();
+    const { nodes, selectedNodeId, selectNode, buildingDamages, isEarthquakeActive } = useSeismosStore();
     const [isMapReady, setIsMapReady] = useState(false);
 
     // Harita başlat
@@ -67,30 +55,27 @@ export default function SeismicMap() {
 
         nodes.forEach((node, nodeId) => {
             const isSelected = nodeId === selectedNodeId;
-            const result = processedResults.get(nodeId);
-            const score = result?.damageScore?.score || 0;
+            const damage = buildingDamages.get(nodeId);
+            const score = damage?.totalScore || 0;
             const color = getColorByScore(score);
             const isCollapsed = score >= 90;
 
-            // Mevcut marker'ı sil (tür değişebilir)
             const existingMarker = markersRef.current.get(nodeId);
 
             if (isCollapsed) {
                 // Yıkılmış bina - X icon
-                if (existingMarker) {
-                    existingMarker.remove();
-                }
+                if (existingMarker) existingMarker.remove();
 
                 const xIcon = L.divIcon({
                     html: `
-                        <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="10" cy="10" r="9" fill="${color}" stroke="#1e293b" stroke-width="2"/>
-                            <path d="M6 6L14 14M14 6L6 14" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+                        <svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="11" cy="11" r="10" fill="${color}" stroke="#1e293b" stroke-width="2"/>
+                            <path d="M7 7L15 15M15 7L7 15" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
                         </svg>
                     `,
                     className: 'collapsed-marker',
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10],
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11],
                 });
 
                 const marker = L.marker([node.lat, node.lng], { icon: xIcon })
@@ -99,23 +84,20 @@ export default function SeismicMap() {
 
                 markersRef.current.set(nodeId, marker);
             } else {
-                // Normal bina - daire
                 if (existingMarker && 'setRadius' in existingMarker) {
-                    // Mevcut CircleMarker güncelle
                     const circleMarker = existingMarker as L.CircleMarker;
                     circleMarker.setStyle({
                         fillColor: color,
                         color: isSelected ? '#ffffff' : '#1e293b',
                         weight: isSelected ? 3 : 1,
-                        radius: isSelected ? 10 : (score > 30 ? 8 : 6),
+                        radius: isSelected ? 10 : (score >= 30 ? 8 : 6),
                     });
                     circleMarker.setLatLng([node.lat, node.lng]);
                 } else {
-                    // Yeni CircleMarker oluştur
                     if (existingMarker) existingMarker.remove();
 
                     const marker = L.circleMarker([node.lat, node.lng], {
-                        radius: 6,
+                        radius: score >= 30 ? 8 : 6,
                         fillColor: color,
                         color: '#1e293b',
                         weight: 1,
@@ -130,20 +112,19 @@ export default function SeismicMap() {
             }
         });
 
-        // Silinmiş node'ların marker'ını temizle
+        // Temizlik
         markersRef.current.forEach((marker, nodeId) => {
             if (!nodes.has(nodeId)) {
                 marker.remove();
                 markersRef.current.delete(nodeId);
             }
         });
-    }, [nodes, selectedNodeId, processedResults, isMapReady, selectNode]);
+    }, [nodes, selectedNodeId, buildingDamages, isMapReady, selectNode]);
 
     return (
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* Deprem aktif uyarısı */}
             {isEarthquakeActive && (
                 <div className="absolute top-4 left-4 bg-red-600/90 backdrop-blur-sm px-4 py-2 rounded-lg flex items-center gap-2 animate-pulse">
                     <div className="w-2 h-2 rounded-full bg-white" />

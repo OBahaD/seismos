@@ -3,8 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import { useSeismosStore } from '@/lib/store';
-import { earthquakeSimulator, DEMO_NODES } from '@/lib/simulator';
-import { signalProcessor } from '@/lib/signal-processor';
+import { DEMO_NODES } from '@/lib/simulator';
 import DashboardPanel from '@/components/dashboard/DashboardPanel';
 
 const SeismicMap = dynamic(() => import('@/components/map/SeismicMap'), {
@@ -17,37 +16,16 @@ const SeismicMap = dynamic(() => import('@/components/map/SeismicMap'), {
 });
 
 export default function Home() {
-  const {
-    setNodes,
-    addReading,
-    setProcessedResult,
-    updateBuildingSummary,
-  } = useSeismosStore();
-
-  const isStarted = useRef(false);
+  const { setNodes } = useSeismosStore();
+  const isInitialized = useRef(false);
 
   useEffect(() => {
-    if (isStarted.current) return;
-    isStarted.current = true;
+    if (isInitialized.current) return;
+    isInitialized.current = true;
 
-    // Node'ları yükle
+    // Node'ları yükle (bu aynı zamanda rastgele base skorları oluşturur)
     setNodes(DEMO_NODES as any);
-
-    // Arka plan titreşimi başlat
-    earthquakeSimulator.start((reading) => {
-      addReading(reading);
-      const result = signalProcessor.process(reading);
-      setProcessedResult(reading.node_id, result);
-    });
-
-    // Özet güncellemesi
-    const summaryInterval = setInterval(updateBuildingSummary, 500);
-
-    return () => {
-      earthquakeSimulator.stop();
-      clearInterval(summaryInterval);
-    };
-  }, [setNodes, addReading, setProcessedResult, updateBuildingSummary]);
+  }, [setNodes]);
 
   return (
     <div className="h-screen bg-slate-950 flex">
