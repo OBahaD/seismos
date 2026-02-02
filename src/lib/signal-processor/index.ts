@@ -167,15 +167,52 @@ export class SignalProcessor {
         const correlation = checkCorrelation(this.recentReadings);
         stages.correlate = { complete: true, timestamp: Date.now() };
 
-        // Stage 4: INTERPRET (now includes damage scoring)
-        // 4a. Estimate current dominant frequency using zero-crossing
-        const currentFrequency = frequencyEstimator.estimate(reading.node_id, filteredMagnitude);
+        // Stage 4: INTERPRET
+        // CRITICAL: Skip damage calculation for very low magnitudes (normal background noise)
+        const MIN_MAGNITUDE_FOR_DAMAGE = 0.05; // Below this, always safe
 
-        // 4b. Update baseline tracker and get fatigue indicator
+        if (filteredMagnitude < MIN_MAGNITUDE_FOR_DAMAGE) {
+            // Return safe score for idle/background noise
+            stages.interpret = { complete: true, timestamp: Date.now() };
+            return {
+                reading,
+                rawMagnitude,
+                filteredMagnitude,
+                isCorrelated: false,
+                correlatedNodes: [],
+                status: 'stable',
+                damageScore: {
+                    score: 0,
+                    category: 'safe',
+                    categoryLabel: 'Güvenli',
+                    components: { frequencyShiftScore: 0, peakEnergyScore: 0, durationScore: 0 },
+                    features: {
+                        frequencyShift: 0,
+                        peakEnergy: 0,
+                        abnormalDuration: 0,
+                        currentFrequency: 5.0,
+                        baselineFrequency: 5.0,
+                    },
+                    legacyStatus: 'stable',
+                },
+                fatigueIndicator: {
+                    hasWarning: false,
+                    trendSlope: 0,
+                    baselineFrequency: 5.0,
+                    currentFrequency: 5.0,
+                    deviationPercent: 0,
+                    sampleCount: 0,
+                    trendConfidence: 0,
+                },
+                stages,
+            };
+        }
+
+        // Full damage calculation only for significant readings
+        const currentFrequency = frequencyEstimator.estimate(reading.node_id, filteredMagnitude);
         const fatigueIndicator = baselineTracker.update(reading.node_id, currentFrequency);
         const baselineFrequency = baselineTracker.getBaseline(reading.node_id);
 
-        // 4c. Extract features for damage scoring
         const features = featureExtractor.extract(
             reading.node_id,
             filteredMagnitude,
@@ -184,10 +221,7 @@ export class SignalProcessor {
             now
         );
 
-        // 4d. Calculate damage score
         const damageScore = damageScoreCalculator.calculate(features);
-
-        // Use damage score's legacy status for backward compatibility
         const status = damageScore.legacyStatus;
         stages.interpret = { complete: true, timestamp: Date.now() };
 
