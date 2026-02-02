@@ -18,7 +18,7 @@ export default function SeismicMap() {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<Map<string, L.CircleMarker | L.Marker>>(new Map());
 
-    const { nodes, selectedNodeId, selectNode, buildingDamages, isEarthquakeActive } = useSeismosStore();
+    const { nodes, selectedNodeId, selectNode, buildingDamages, isEarthquakeActive, consensusEvidence } = useSeismosStore();
     const [isMapReady, setIsMapReady] = useState(false);
 
     // Harita başlat
@@ -47,38 +47,90 @@ export default function SeismicMap() {
         };
     }, []);
 
-    // Marker güncelle
+    // Marker ve Evidence Lines güncelle
     useEffect(() => {
         if (!mapRef.current || !isMapReady) return;
 
         const map = mapRef.current;
+        const evidenceLines: L.Polyline[] = [];
 
+        // 1. Evidence Lines (Kanıt Çizgileri)
+        consensusEvidence.forEach((witnessIds, silentNodeId) => {
+            const silentNode = nodes.get(silentNodeId);
+            if (!silentNode) return;
+
+            // Sadece seçili olan binanın kanıt ağını göster (Temiz görünüm)
+            if (silentNodeId !== selectedNodeId) return;
+
+            witnessIds.forEach(witnessId => {
+                const witnessNode = nodes.get(witnessId);
+                if (!witnessNode) return;
+
+                const line = L.polyline([
+                    [silentNode.lat, silentNode.lng],
+                    [witnessNode.lat, witnessNode.lng]
+                ], {
+                    color: '#06b6d4', // Cyan (Daha belirgin)
+                    weight: 3,
+                    dashArray: '10, 10',
+                    opacity: 0.8,
+                    lineCap: 'round'
+                }).addTo(map);
+
+                evidenceLines.push(line);
+            });
+        });
+
+        // 2. Marker'lar
         nodes.forEach((node, nodeId) => {
             const isSelected = nodeId === selectedNodeId;
             const damage = buildingDamages.get(nodeId);
             const score = damage?.totalScore || 0;
             const color = getColorByScore(score);
-            const isCollapsed = score >= 90;
+
+            const isVerifiedCollapse = node.status === 'collapse';
+            const isInferredCollapse = node.status === 'collapse_inferred';
 
             const existingMarker = markersRef.current.get(nodeId);
 
-            if (isCollapsed) {
-                // Yıkılmış bina - X icon
+            if (isVerifiedCollapse || isInferredCollapse) {
+                // Yıkılmış bina (Doğrulanmış veya Tahmin Edilen)
                 if (existingMarker) existingMarker.remove();
 
-                const xIcon = L.divIcon({
-                    html: `
+                let markerHtml = '';
+
+                if (isVerifiedCollapse) {
+                    // Doğrulanmış: Kırmızı X
+                    markerHtml = `
                         <svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
                             <circle cx="11" cy="11" r="10" fill="${color}" stroke="#1e293b" stroke-width="2"/>
                             <path d="M7 7L15 15M15 7L7 15" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
                         </svg>
-                    `,
+                    `;
+                } else {
+                    // INSD (Tahmin Edilen): Siyah/Gri, Pulsing, Soru İşareti
+                    // "Ghost Node" efekti
+                    markerHtml = `
+                        <div class="relative w-full h-full flex items-center justify-center">
+                            <div class="absolute inset-0 bg-slate-900 rounded-full animate-ping opacity-75"></div>
+                            <div class="relative z-10 w-full h-full">
+                                <svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="11" cy="11" r="10" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                                    <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="bold">?</text>
+                                </svg>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const icon = L.divIcon({
+                    html: markerHtml,
                     className: 'collapsed-marker',
                     iconSize: [22, 22],
                     iconAnchor: [11, 11],
                 });
 
-                const marker = L.marker([node.lat, node.lng], { icon: xIcon })
+                const marker = L.marker([node.lat, node.lng], { icon: icon })
                     .on('click', () => selectNode(nodeId))
                     .addTo(map);
 
@@ -112,14 +164,11 @@ export default function SeismicMap() {
             }
         });
 
-        // Temizlik
-        markersRef.current.forEach((marker, nodeId) => {
-            if (!nodes.has(nodeId)) {
-                marker.remove();
-                markersRef.current.delete(nodeId);
-            }
-        });
-    }, [nodes, selectedNodeId, buildingDamages, isMapReady, selectNode]);
+        // Çizgileri temizleme fonksiyonu
+        return () => {
+            evidenceLines.forEach(l => l.remove());
+        };
+    }, [nodes, selectedNodeId, buildingDamages, isMapReady, selectNode, consensusEvidence]);
 
     return (
         <div className="relative w-full h-full">

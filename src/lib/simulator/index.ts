@@ -91,11 +91,19 @@ export class EarthquakeSimulator {
     private updateCallbacks: Set<(readings: Map<string, SensorReading>) => void> = new Set();
     private earthquakeInterval: ReturnType<typeof setInterval> | null = null;
     private idleInterval: ReturnType<typeof setInterval> | null = null;
+    private deadNodes: Set<string> = new Set();
+    private currentDamages: Map<string, number> = new Map(); // Hasar hafızası
 
     // Canlı okuma dinleyicisi ekle
     onLiveUpdate(callback: (readings: Map<string, SensorReading>) => void): () => void {
         this.updateCallbacks.add(callback);
         return () => this.updateCallbacks.delete(callback);
+    }
+
+    // Hasar durumunu güncelle (Store'dan çağrılır)
+    updateDamages(damages: Map<string, number>) {
+        // Map'i kopyala
+        this.currentDamages = new Map(damages);
     }
 
     // Tüm dinleyicilere güncelleme gönder
@@ -104,7 +112,16 @@ export class EarthquakeSimulator {
     }
 
     // Normal durum - çok düşük titreşim
+    // ARTIK HASARA GÖRE FREKANS ÜRETİYOR (Histeresis)
     generateIdleReading(nodeId: string): SensorReading {
+        const damage = this.currentDamages.get(nodeId) || 0;
+
+        // Frekans Histeresisi: Hasar arttıkça doğal frekans düşer (Bina yumuşar)
+        // 0 hasar -> ~4.5 Hz (Sağlam, rijit)
+        // 100 hasar -> ~1.0 Hz (Yıkık, salınım periyodu çok uzun)
+        const healthFactor = Math.max(0, 1 - (damage / 100));
+        const baseFrequency = 1.0 + (3.5 * healthFactor);
+
         const noise = 0.003;
         const accelX = (Math.random() - 0.5) * noise;
         const accelY = (Math.random() - 0.5) * noise;
@@ -116,7 +133,7 @@ export class EarthquakeSimulator {
             accelY,
             accelZ,
             magnitude: Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2),
-            frequency: 4.5 + Math.random() * 1.0,
+            frequency: baseFrequency + (Math.random() * 0.2), // Hafif varyasyon
         };
     }
 
@@ -126,7 +143,11 @@ export class EarthquakeSimulator {
 
         // İlk okumaları oluştur
         DEMO_NODES.forEach((node) => {
-            this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+            if (!this.deadNodes.has(node.id)) {
+                this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+            } else {
+                this.liveReadings.delete(node.id); // Ölü node'lar veri göndermez
+            }
         });
         this.emitUpdate();
 
@@ -135,7 +156,11 @@ export class EarthquakeSimulator {
             if (this.earthquakeInterval) return; // Deprem varsa atla
 
             DEMO_NODES.forEach((node) => {
-                this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+                if (!this.deadNodes.has(node.id)) {
+                    this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+                } else {
+                    this.liveReadings.delete(node.id);
+                }
             });
             this.emitUpdate();
         }, 200);
@@ -151,6 +176,7 @@ export class EarthquakeSimulator {
     // Deprem simülasyonu
     triggerEarthquake(
         config: EarthquakeConfig,
+        currentTotalScores: Map<string, number>, // Mevcut birikmiş hasarlar
         onProgress: (progress: number) => void,
         onComplete: (damages: Map<string, number>) => void
     ): void {
@@ -177,7 +203,7 @@ export class EarthquakeSimulator {
                 config.intensity * 25 * distanceFactor * vulnerabilityFactor * (0.5 + Math.random() * 0.5)
             );
 
-            damageResults.set(node.id, Math.min(70, damage));
+            damageResults.set(node.id, Math.min(100, damage));
         });
 
         // Canlı veri güncellemesi
@@ -190,6 +216,12 @@ export class EarthquakeSimulator {
 
             // Her bina için canlı okuma oluştur
             DEMO_NODES.forEach((node) => {
+                // Ölü node'lar konuşmaz
+                if (this.deadNodes.has(node.id)) {
+                    this.liveReadings.delete(node.id);
+                    return;
+                }
+
                 const distLat = node.lat - config.epicenterLat;
                 const distLng = node.lng - config.epicenterLng;
                 const distance = Math.sqrt(distLat ** 2 + distLng ** 2);
@@ -210,14 +242,34 @@ export class EarthquakeSimulator {
                 });
             });
 
+            // Hasar > 85 olanların çökme (susma/sensor kaybı) ihtimali
+            // ARTIK KÜMÜLATİF HASARA BAKIYORUZ
+            if (envelope > 0.8) {
+                damageResults.forEach((newDmg, nodeId) => {
+                    const currentTotal = currentTotalScores.get(nodeId) || 0;
+                    const projectedTotal = Math.min(100, currentTotal + newDmg);
+
+                    if (projectedTotal >= 85 && !this.deadNodes.has(nodeId)) {
+                        // Bina yıkılıyorsa %40 ihtimalle sensör de susar
+                        if (Math.random() < 0.4) {
+                            this.deadNodes.add(nodeId);
+                        }
+                    }
+                });
+            }
+
             this.emitUpdate();
 
             if (tickCount >= totalTicks) {
                 if (this.earthquakeInterval) clearInterval(this.earthquakeInterval);
 
-                // Normal duruma dön
+                // Normal duruma dön (ama ölüler hariç)
                 DEMO_NODES.forEach((node) => {
-                    this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+                    if (!this.deadNodes.has(node.id)) {
+                        this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+                    } else {
+                        this.liveReadings.delete(node.id);
+                    }
                 });
                 this.emitUpdate();
 
@@ -227,7 +279,8 @@ export class EarthquakeSimulator {
     }
 
     // Belirli bina için son okumayı getir
-    getReading(nodeId: string): SensorReading {
+    getReading(nodeId: string): SensorReading | null { // null dönebilir artık
+        if (this.deadNodes.has(nodeId)) return null;
         return this.liveReadings.get(nodeId) || this.generateIdleReading(nodeId);
     }
 
@@ -236,6 +289,11 @@ export class EarthquakeSimulator {
             clearInterval(this.earthquakeInterval);
             this.earthquakeInterval = null;
         }
+    }
+
+    reset(): void {
+        this.deadNodes.clear();
+        this.startIdleSimulation();
     }
 }
 

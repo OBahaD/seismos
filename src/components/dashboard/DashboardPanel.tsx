@@ -13,6 +13,8 @@ const STRUCTURE_LABELS: Record<string, string> = {
     ahsap: 'Ahşap',
 };
 
+import SystemInfoModal from '@/components/SystemInfoModal';
+
 export default function DashboardPanel() {
     const {
         selectedNodeId,
@@ -32,6 +34,7 @@ export default function DashboardPanel() {
     const [canReset, setCanReset] = useState(false);
     const [activeFilter, setActiveFilter] = useState<CategoryFilter>(null);
     const [liveReading, setLiveReading] = useState<SensorReading | null>(null);
+    const [isInfoOpen, setIsInfoOpen] = useState(false);
 
     const node = selectedNodeId ? nodes.get(selectedNodeId) : null;
     const damage = selectedNodeId ? buildingDamages.get(selectedNodeId) : null;
@@ -61,7 +64,7 @@ export default function DashboardPanel() {
             const d = buildingDamages.get(id);
             const score = d?.totalScore || 0;
             let category: CategoryFilter = 'safe';
-            if (score >= 90) category = 'collapsed';
+            if (score >= 90 || n.status === 'collapse_inferred') category = 'collapsed';
             else if (score >= 70) category = 'critical';
             else if (score >= 30) category = 'damaged';
             if (activeFilter === category) buildings.push({ id, name: n.name, score });
@@ -74,9 +77,16 @@ export default function DashboardPanel() {
         setEarthquakeActive(true);
         setCanReset(false);
 
+        // Mevcut toplam hasarı simülatöre bildir
+        const currentScores = new Map<string, number>();
+        buildingDamages.forEach((dmg, id) => {
+            currentScores.set(id, dmg.totalScore);
+        });
+
         const epicenter = DEMO_NODES[Math.floor(Math.random() * DEMO_NODES.length)];
         earthquakeSimulator.triggerEarthquake(
             { intensity: 1.5 + Math.random() * 0.5, durationMs: 5000, epicenterLat: epicenter.lat, epicenterLng: epicenter.lng },
+            currentScores,
             (progress) => setEarthquakeProgress(progress),
             (damages) => {
                 applyEarthquakeDamage(damages);
@@ -104,18 +114,29 @@ export default function DashboardPanel() {
 
     return (
         <div className="h-full flex flex-col">
+            <SystemInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />
+
             {/* Header */}
             <div className="p-4 border-b border-slate-800">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 className="text-lg font-bold text-white">SEISMOS</h1>
+                            <p className="text-xs text-slate-500">Yapısal İzleme Sistemi</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-lg font-bold text-white">SEISMOS</h1>
-                        <p className="text-xs text-slate-500">Yapısal İzleme Sistemi</p>
-                    </div>
+                    <button
+                        onClick={() => setIsInfoOpen(true)}
+                        className="w-8 h-8 rounded-full border border-slate-600 text-slate-400 flex items-center justify-center hover:bg-slate-800 hover:text-white transition-colors"
+                        title="Sistem Nasıl Çalışır?"
+                    >
+                        ?
+                    </button>
                 </div>
             </div>
 
@@ -202,6 +223,21 @@ export default function DashboardPanel() {
                             </button>
                         </div>
 
+                        {/* INSD Uyarısı */}
+                        {node.status === 'collapse_inferred' && (
+                            <div className="p-3 bg-red-900/30 border border-red-500/50 rounded-xl flex gap-3">
+                                <div className="text-red-500 mt-0.5">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                </div>
+                                <div>
+                                    <h4 className="text-red-400 font-bold text-sm">Sinyal Kaybı (INSD)</h4>
+                                    <p className="text-red-400/80 text-xs mt-1">
+                                        Bu binadan sinyal alınamıyor. Çevredeki <b>{useSeismosStore.getState().consensusEvidence.get(node.id)?.length || 0} aktif sensör</b> verisine dayanarak yıkıldığı tahmin ediliyor.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Hasar Skoru */}
                         <div className={`rounded-xl p-4 ${getScoreColor(damage.totalScore).bg}/10 border ${getScoreColor(damage.totalScore).bg}/20`}>
                             <div className="flex items-end justify-between mb-2">
@@ -210,7 +246,7 @@ export default function DashboardPanel() {
                                     <div className={`text-3xl font-bold ${getScoreColor(damage.totalScore).text}`}>{damage.totalScore}<span className="text-sm text-slate-500">/100</span></div>
                                 </div>
                                 <div className={`px-2 py-1 rounded-full text-xs font-medium ${getScoreColor(damage.totalScore).bg}/20 ${getScoreColor(damage.totalScore).text}`}>
-                                    {getScoreColor(damage.totalScore).label}
+                                    {node.status === 'collapse_inferred' ? 'Tahmini Yıkım' : getScoreColor(damage.totalScore).label}
                                 </div>
                             </div>
                             <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -246,7 +282,7 @@ export default function DashboardPanel() {
                         </div>
 
                         {/* Canlı Sensör Verileri */}
-                        {liveReading && (
+                        {liveReading ? (
                             <div className="rounded-xl bg-slate-800/30 border border-slate-700/50 p-4">
                                 <div className="flex items-center justify-between mb-3">
                                     <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Canlı Sensör</h3>
@@ -290,6 +326,15 @@ export default function DashboardPanel() {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        ) : (
+                            // Sensör kapalı / INSD
+                            <div className="rounded-xl bg-slate-900 border border-slate-800 p-8 flex flex-col items-center justify-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mb-3">
+                                    <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                </div>
+                                <h3 className="text-slate-400 font-medium text-sm">Sinyal Yok</h3>
+                                <p className="text-slate-500 text-xs mt-1">Sensör verisi alınamıyor.</p>
                             </div>
                         )}
                     </div>

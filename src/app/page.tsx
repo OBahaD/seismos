@@ -16,7 +16,7 @@ const SeismicMap = dynamic(() => import('@/components/map/SeismicMap'), {
 });
 
 export default function Home() {
-  const { setNodes } = useSeismosStore();
+  const { setNodes, updateHeartbeat, checkConsensus } = useSeismosStore();
   const isInitialized = useRef(false);
 
   useEffect(() => {
@@ -29,10 +29,18 @@ export default function Home() {
     // Arka plan sensör simülasyonunu başlat
     earthquakeSimulator.startIdleSimulation();
 
+    // Store'u simülatöre bağla (INSD Logic için)
+    const unsubscribe = earthquakeSimulator.onLiveUpdate((readings) => {
+      const activeNodeIds = Array.from(readings.keys());
+      updateHeartbeat(activeNodeIds);
+      checkConsensus(readings);
+    });
+
     return () => {
+      unsubscribe();
       earthquakeSimulator.stopIdleSimulation();
     };
-  }, [setNodes]);
+  }, [setNodes, updateHeartbeat, checkConsensus]);
 
   return (
     <div className="h-screen bg-slate-950 flex">
