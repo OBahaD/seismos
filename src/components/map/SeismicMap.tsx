@@ -7,45 +7,28 @@ import { useSeismosStore } from '@/lib/store';
 import type { Node, NodeStatus } from '@/lib/supabase/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Status color mapping
+// Status color mapping - professional palette
 const STATUS_COLORS: Record<NodeStatus, string> = {
-    stable: '#22c55e',
-    anomaly: '#eab308',
-    warning: '#f97316',
-    critical: '#ef4444',
-    collapse: '#581c87', // Purple-900 for collapse
+    stable: '#10b981',   // Emerald-500
+    anomaly: '#f59e0b',  // Amber-500
+    warning: '#f97316',  // Orange-500
+    critical: '#ef4444', // Red-500
+    collapse: '#7c3aed', // Violet-600
 };
 
-const STATUS_PULSE_DURATION: Record<NodeStatus, number> = {
-    stable: 3000,
-    anomaly: 2000,
-    warning: 1000,
-    critical: 500,
-    collapse: 200, // Very fast pulse for collapse
-};
-
-// Create custom pulsing marker SVG
+// Create clean marker icon (no glow effects)
 function createMarkerIcon(status: NodeStatus, isSelected: boolean, signalLoss: boolean): L.DivIcon {
     const color = STATUS_COLORS[status];
-    const size = isSelected ? 48 : 36;
+    const size = isSelected ? 32 : 24;
     const opacity = signalLoss ? 0.4 : 1;
-    const pulseClass = signalLoss ? '' : `pulse-${status}`;
+    const strokeWidth = isSelected ? 3 : 2;
+    const ringRadius = isSelected ? 14 : 0;
 
     const svg = `
-    <svg width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="opacity: ${opacity}">
-      <defs>
-        <filter id="glow-${status}" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      <circle cx="24" cy="24" r="12" fill="${color}" filter="url(#glow-${status})" class="${pulseClass}"/>
-      <circle cx="24" cy="24" r="8" fill="#050505"/>
-      <circle cx="24" cy="24" r="4" fill="${color}"/>
-      ${isSelected ? `<circle cx="24" cy="24" r="20" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4 4"/>` : ''}
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" style="opacity: ${opacity}">
+      ${isSelected ? `<circle cx="${size / 2}" cy="${size / 2}" r="${ringRadius}" fill="none" stroke="${color}" stroke-width="2" stroke-opacity="0.3"/>` : ''}
+      <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 4}" fill="${color}" stroke="#0f172a" stroke-width="${strokeWidth}"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${size / 6}" fill="#0f172a"/>
     </svg>
   `;
 
@@ -69,7 +52,7 @@ export default function SeismicMap() {
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
-        // Create map with light theme tiles
+        // Create map with dark theme tiles
         const map = L.map(mapContainerRef.current, {
             center: [41.0290, 28.9490], // Fatih/Balat Center
             zoom: 16,
@@ -79,13 +62,13 @@ export default function SeismicMap() {
                 [41.0200, 28.9350], // South West
                 [41.0400, 28.9650]  // North East
             ],
-            maxBoundsViscosity: 1.0, // Hard bounce back
+            maxBoundsViscosity: 1.0,
             zoomControl: true,
             attributionControl: true,
         });
 
-        // CartoDB Positron (Light) tiles
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        // CartoDB Dark Matter (Professional Dark) tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20,
@@ -122,11 +105,12 @@ export default function SeismicMap() {
                     .addTo(map)
                     .on('click', () => selectNode(nodeId));
 
-                // Add tooltip
+                // Add tooltip with professional styling
                 marker.bindTooltip(node.name, {
                     permanent: false,
                     direction: 'top',
                     className: 'seismos-tooltip',
+                    offset: [0, -8],
                 });
 
                 markersRef.current.set(nodeId, marker);
@@ -146,9 +130,6 @@ export default function SeismicMap() {
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* Map overlay gradient */}
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-[#050505] via-transparent to-[#050505] opacity-30" />
-
             {/* Signal loss warnings */}
             <AnimatePresence>
                 {signalLossNodes.size > 0 && (
@@ -156,32 +137,37 @@ export default function SeismicMap() {
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
-                        className="absolute top-4 left-4 bg-red-900/50 border border-red-500/50 rounded px-3 py-2 backdrop-blur-sm"
+                        className="absolute top-4 left-4 bg-slate-800/90 border border-red-500/30 rounded-lg px-4 py-2 backdrop-blur-sm"
                     >
-                        <span className="text-red-400 font-mono text-sm">
-                            ⚠ SİNYAL_KAYBI: {signalLossNodes.size} node
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-red-400 font-medium text-sm">
+                                Sinyal Kaybı: {signalLossNodes.size} node
+                            </span>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Custom tooltip styles */}
+            {/* Professional tooltip styles */}
             <style jsx global>{`
         .seismos-marker {
           background: transparent !important;
           border: none !important;
         }
         .seismos-tooltip {
-          background: rgba(10, 10, 10, 0.9) !important;
-          border: 1px solid rgba(6, 182, 212, 0.5) !important;
-          color: #e5e5e5 !important;
-          font-family: var(--font-mono) !important;
+          background: rgba(30, 41, 59, 0.95) !important;
+          border: 1px solid rgba(71, 85, 105, 0.5) !important;
+          color: #f1f5f9 !important;
+          font-family: var(--font-sans) !important;
           font-size: 12px !important;
-          padding: 4px 8px !important;
-          border-radius: 4px !important;
+          font-weight: 500 !important;
+          padding: 6px 10px !important;
+          border-radius: 6px !important;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
         }
         .seismos-tooltip:before {
-          border-top-color: rgba(6, 182, 212, 0.5) !important;
+          border-top-color: rgba(30, 41, 59, 0.95) !important;
         }
       `}</style>
         </div>

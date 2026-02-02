@@ -3,59 +3,53 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* SEISMOS - Sci-Fi Industrial Theme */
+/* SEISMOS - Professional Dark Slate Theme */
 :root {
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-sans: "Inter", system-ui, sans-serif;
 
-  /* Status Colors */
-  --status-stable: #22c55e;
-  --status-anomaly: #eab308;
+  /* Semantic Status Colors - Accessible */
+  --status-safe: #10b981;      /* Emerald-500 */
+  --status-risky: #f59e0b;     /* Amber-500 */
+  --status-damaged: #ef4444;   /* Red-500 */
+  --status-stable: #10b981;
+  --status-anomaly: #f59e0b;
   --status-warning: #f97316;
   --status-critical: #ef4444;
 
-  /* Obsidian Dark Theme / Light Override */
-  --background: #ffffff;
-  --background-secondary: #f4f4f5;
-  --background-elevated: #ffffff;
-  --foreground: #09090b;
-  --foreground-muted: #71717a;
+  /* Dark Slate Theme */
+  --background: #0f172a;           /* Slate-900 */
+  --background-secondary: #1e293b; /* Slate-800 */
+  --background-elevated: #334155;  /* Slate-700 */
+  --foreground: #f1f5f9;           /* Slate-100 */
+  --foreground-muted: #94a3b8;     /* Slate-400 */
 
-  /* Accent Colors */
+  /* Accent Colors - Minimal */
+  --accent-primary: #3b82f6;       /* Blue-500 */
   --accent-cyan: #06b6d4;
-  --accent-blue: #3b82f6;
-  --accent-purple: #8b5cf6;
-
-  /* Glow Effects */
-  --glow-green: 0 0 20px rgba(34, 197, 94, 0.5);
-  --glow-yellow: 0 0 20px rgba(234, 179, 8, 0.5);
-  --glow-orange: 0 0 20px rgba(249, 115, 22, 0.5);
-  --glow-red: 0 0 20px rgba(239, 68, 68, 0.5);
-  --glow-cyan: 0 0 20px rgba(6, 182, 212, 0.5);
 
   /* Component Colors */
-  --card: #ffffff;
-  --card-foreground: #09090b;
-  --popover: #ffffff;
-  --popover-foreground: #09090b;
-  --primary: #0891b2;
-  /* Darker cyan for light mode readability */
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #334155;
+  --accent-foreground: #f1f5f9;
   --destructive: #ef4444;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.1);
-  --ring: #06b6d4;
+  --border: #475569;               /* Slate-600 */
+  --input: #334155;
+  --ring: #3b82f6;
 
   /* Chart Colors */
-  --chart-1: #06b6d4;
-  --chart-2: #22c55e;
-  --chart-3: #eab308;
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
   --chart-4: #f97316;
   --chart-5: #ef4444;
 
@@ -93,14 +87,14 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Custom Status Colors */
+  /* Semantic Colors */
+  --color-status-safe: var(--status-safe);
+  --color-status-risky: var(--status-risky);
+  --color-status-damaged: var(--status-damaged);
   --color-status-stable: var(--status-stable);
   --color-status-anomaly: var(--status-anomaly);
   --color-status-warning: var(--status-warning);
   --color-status-critical: var(--status-critical);
-  --color-accent-cyan: var(--accent-cyan);
-  --color-accent-blue: var(--accent-blue);
-  --color-accent-purple: var(--accent-purple);
 }
 
 @layer base {
@@ -120,99 +114,17 @@
   }
 }
 
-/* Glitch Effect Animation */
-@keyframes glitch {
-  0% {
-    transform: translate(0);
-    filter: hue-rotate(0deg);
-  }
-
-  10% {
-    transform: translate(-2px, 2px);
-    filter: hue-rotate(90deg);
-  }
-
-  20% {
-    transform: translate(2px, -2px);
-    filter: hue-rotate(180deg);
-  }
-
-  30% {
-    transform: translate(-2px, 2px);
-    filter: hue-rotate(270deg);
-  }
-
-  40% {
-    transform: translate(2px, -2px);
-    filter: hue-rotate(360deg);
-  }
-
-  50% {
-    transform: translate(-2px, 2px);
-  }
-
-  60% {
-    transform: translate(2px, -2px);
-  }
-
-  70% {
-    transform: translate(-2px, 2px);
-  }
-
-  80% {
-    transform: translate(2px, -2px);
-  }
-
-  90% {
-    transform: translate(-2px, 2px);
-  }
-
-  100% {
-    transform: translate(0);
-  }
+/* Subtle pulse for status indicators */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
-@keyframes pulse-glow {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.5;
-  }
-}
-
-@keyframes scan-line {
-  0% {
-    transform: translateY(-100%);
-  }
-
-  100% {
-    transform: translateY(100vh);
-  }
-}
-
-.glitch-effect {
-  animation: glitch 0.3s ease-in-out;
-}
-
-.pulse-stable {
-  animation: pulse-glow 3s ease-in-out infinite;
-}
-
-.pulse-anomaly {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.pulse-warning {
-  animation: pulse-glow 1s ease-in-out infinite;
-}
-
-.pulse-critical {
-  animation: pulse-glow 0.5s ease-in-out infinite;
-}
+.pulse-stable { animation: pulse-subtle 3s ease-in-out infinite; }
+.pulse-anomaly { animation: pulse-subtle 2s ease-in-out infinite; }
+.pulse-warning { animation: pulse-subtle 1.5s ease-in-out infinite; }
+.pulse-critical { animation: pulse-subtle 0.8s ease-in-out infinite; }
+.pulse-collapse { animation: pulse-subtle 0.5s ease-in-out infinite; }
 
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
@@ -225,12 +137,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--foreground-muted);
 }
 
 /* Signal Loss Effect */
@@ -239,26 +151,23 @@
   filter: grayscale(50%);
 }
 
-/* Grid Background Pattern */
-.grid-pattern {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
-}
-
-/* Leaflet overrides for light theme */
+/* Leaflet overrides for dark theme */
 .leaflet-container {
   background: var(--background) !important;
 }
 
 .leaflet-control-zoom a {
-  background: var(--background-elevated) !important;
+  background: var(--background-secondary) !important;
   color: var(--foreground) !important;
   border-color: var(--border) !important;
 }
 
+.leaflet-control-zoom a:hover {
+  background: var(--background-elevated) !important;
+}
+
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(15, 23, 42, 0.9) !important;
   color: var(--foreground-muted) !important;
+  font-size: 10px !important;
 }

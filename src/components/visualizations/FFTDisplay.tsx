@@ -9,13 +9,11 @@ interface FFTDisplayProps {
     height?: number;
 }
 
-export default function FFTDisplay({ nodeId, width = 300, height = 150 }: FFTDisplayProps) {
+export default function FFTDisplay({ nodeId, width = 300, height = 120 }: FFTDisplayProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationRef = useRef<number | null>(null);
     const { latestReadings } = useSeismosStore();
 
-    // Mock FFT data generation since we don't have actual raw audio-like samples in bursts
-    // We'll simulate frequency shifts based on the Z-axis magnitude
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -30,50 +28,53 @@ export default function FFTDisplay({ nodeId, width = 300, height = 150 }: FFTDis
 
             // Update bars with some randomness + intensity modulation
             bars = bars.map((prev, i) => {
-                // Higher frequencies (higher i) react more to intensity
-                const jitter = Math.random() * 0.2;
-                let target = Math.random() * 0.3; // Base noise
+                const target = Math.random() * 0.15; // Reduced base noise
+                let signal = target;
 
                 if (reading) {
-                    // Create spectral shape based on intensity
-                    const center = 8 + intensity * 16; // Peak moves with intensity
+                    const center = 8 + intensity * 16;
                     const dist = Math.abs(i - center);
-                    const signal = Math.exp(-dist * dist / 20) * intensity;
-                    target += signal;
+                    signal += Math.exp(-dist * dist / 25) * intensity;
                 }
 
-                return prev * 0.8 + target * 0.2; // Smooth transition
+                return prev * 0.85 + signal * 0.15;
             });
 
-            // Clear
-            ctx.fillStyle = '#0a0a0a';
+            // Clear with slate background
+            ctx.fillStyle = '#1e293b';
             ctx.fillRect(0, 0, width, height);
+
+            // Draw grid lines (subtle)
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            for (let y = height * 0.25; y < height; y += height * 0.25) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
 
             // Draw bars
             const barWidth = width / bars.length;
             const gap = 2;
 
             bars.forEach((val, i) => {
-                const barHeight = val * height * 0.8;
+                const barHeight = val * height * 0.85;
                 const x = i * barWidth;
                 const y = height - barHeight;
 
-                // Gradient fill
-                const gradient = ctx.createLinearGradient(x, y, x, height);
-                gradient.addColorStop(0, '#06b6d4');   // Cyan top
-                gradient.addColorStop(1, '#3b82f6');   // Blue bottom
-
-                // High magnitude warning color
-                if (val > 0.8) {
-                    gradient.addColorStop(0, '#ef4444'); // Red top for peaks
+                // Color based on intensity
+                let color: string;
+                if (val > 0.7) {
+                    color = '#ef4444'; // Red for peaks
+                } else if (val > 0.4) {
+                    color = '#f59e0b'; // Amber for medium
+                } else {
+                    color = '#64748b'; // Slate for low
                 }
 
-                ctx.fillStyle = gradient;
-                ctx.fillRect(x, y, barWidth - gap, barHeight);
-
-                // Reflection effect
-                ctx.fillStyle = 'rgba(6, 182, 212, 0.1)';
-                ctx.fillRect(x, height, barWidth - gap, barHeight * 0.3);
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 1, y, barWidth - gap, barHeight);
             });
 
             animationRef.current = requestAnimationFrame(draw);
@@ -87,11 +88,11 @@ export default function FFTDisplay({ nodeId, width = 300, height = 150 }: FFTDis
     }, [nodeId, latestReadings, width, height]);
 
     return (
-        <div className="relative rounded bg-black/5 border border-border p-2">
-            <div className="absolute top-2 left-2 text-[10px] font-mono text-cyan-600/50">
-                FREKANS SPEKTRUMU (Hz)
+        <div className="relative rounded-lg bg-slate-800 border border-slate-700 overflow-hidden">
+            <div className="absolute top-2 left-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                Frekans Spektrumu
             </div>
-            <canvas ref={canvasRef} width={width} height={height} />
+            <canvas ref={canvasRef} width={width} height={height} className="mt-4" />
         </div>
     );
 }

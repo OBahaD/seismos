@@ -1,9 +1,18 @@
 import type { SensorReading, NodeStatus } from '../supabase/types';
+import {
+    damageScoreCalculator,
+    featureExtractor,
+    frequencyEstimator,
+    type DamageScore,
+    type DamageFeatures
+} from '../damage-score';
+import { baselineTracker, type FatigueIndicator } from '../damage-score/baseline-tracker';
 
 export interface FilteredReading extends SensorReading {
     filteredMagnitude: number;
     rawMagnitude: number;
 }
+
 
 // Simple moving average filter
 export class MovingAverageFilter {
@@ -104,6 +113,11 @@ export interface PipelineResult {
     isCorrelated: boolean;
     correlatedNodes: string[];
     status: NodeStatus;
+
+    // NEW: Damage scoring
+    damageScore: DamageScore;
+    fatigueIndicator: FatigueIndicator;
+
     stages: {
         raw: { complete: boolean; timestamp: number };
         filter: { complete: boolean; timestamp: number };
@@ -153,8 +167,28 @@ export class SignalProcessor {
         const correlation = checkCorrelation(this.recentReadings);
         stages.correlate = { complete: true, timestamp: Date.now() };
 
-        // Stage 4: INTERPRET
-        const status = interpretMagnitude(filteredMagnitude);
+        // Stage 4: INTERPRET (now includes damage scoring)
+        // 4a. Estimate current dominant frequency using zero-crossing
+        const currentFrequency = frequencyEstimator.estimate(reading.node_id, filteredMagnitude);
+
+        // 4b. Update baseline tracker and get fatigue indicator
+        const fatigueIndicator = baselineTracker.update(reading.node_id, currentFrequency);
+        const baselineFrequency = baselineTracker.getBaseline(reading.node_id);
+
+        // 4c. Extract features for damage scoring
+        const features = featureExtractor.extract(
+            reading.node_id,
+            filteredMagnitude,
+            currentFrequency,
+            baselineFrequency,
+            now
+        );
+
+        // 4d. Calculate damage score
+        const damageScore = damageScoreCalculator.calculate(features);
+
+        // Use damage score's legacy status for backward compatibility
+        const status = damageScore.legacyStatus;
         stages.interpret = { complete: true, timestamp: Date.now() };
 
         return {
@@ -164,6 +198,8 @@ export class SignalProcessor {
             isCorrelated: correlation.isCorrelated,
             correlatedNodes: correlation.correlatedNodes,
             status,
+            damageScore,
+            fatigueIndicator,
             stages,
         };
     }

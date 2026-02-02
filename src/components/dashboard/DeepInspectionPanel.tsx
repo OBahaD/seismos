@@ -1,15 +1,16 @@
+'use client';
+
 import { useState } from 'react';
 import { useSeismosStore } from '@/lib/store';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import FFTDisplay from '../visualizations/FFTDisplay';
 import ValidationHUD from './ValidationHUD';
 import SystemInfoModal from '../modals/SystemInfoModal';
 
-const HEALTH_CONFIG: Record<string, { color: string; label: string; icon: string }> = {
-    optimal: { color: '#16a34a', label: 'NORMAL', icon: '●' },
-    degraded: { color: '#ea580c', label: 'ZAYIF', icon: '◐' },
-    critical: { color: '#dc2626', label: 'KRİTİK', icon: '○' },
+const HEALTH_CONFIG: Record<string, { color: string; label: string }> = {
+    optimal: { color: '#10b981', label: 'Normal' },
+    degraded: { color: '#f59e0b', label: 'Zayıf' },
+    critical: { color: '#ef4444', label: 'Kritik' },
 };
 
 export default function DeepInspectionPanel() {
@@ -18,6 +19,7 @@ export default function DeepInspectionPanel() {
         selectedNodeId,
         nodes,
         latestReadings,
+        processedResults,
         selectNode,
         activeNodeCount,
         peakMagnitude,
@@ -28,176 +30,226 @@ export default function DeepInspectionPanel() {
 
     const node = selectedNodeId ? nodes.get(selectedNodeId) : null;
     const reading = selectedNodeId ? latestReadings.get(selectedNodeId) : null;
+    const processedResult = selectedNodeId ? processedResults.get(selectedNodeId) : null;
     const healthConfig = HEALTH_CONFIG[systemHealth] || HEALTH_CONFIG.optimal;
 
+    // Damage score colors - semantic
+    const getScoreStyle = (score: number) => {
+        if (score < 30) return {
+            bg: 'bg-emerald-500',
+            text: 'text-emerald-400',
+            light: 'bg-emerald-500/10',
+            border: 'border-emerald-500/30'
+        };
+        if (score < 60) return {
+            bg: 'bg-amber-500',
+            text: 'text-amber-400',
+            light: 'bg-amber-500/10',
+            border: 'border-amber-500/30'
+        };
+        return {
+            bg: 'bg-red-500',
+            text: 'text-red-400',
+            light: 'bg-red-500/10',
+            border: 'border-red-500/30'
+        };
+    };
+
     return (
-        <aside className="w-full bg-background border-l border-border flex flex-col h-full shadow-xl z-40">
-            {/* GLOBAL SYSTEM STATUS HEADER (Always Visible) */}
-            <div className="p-6 border-b border-border bg-white shrink-0">
+        <aside className="w-full bg-slate-900 border-l border-slate-700 flex flex-col h-full">
+            {/* HEADER */}
+            <div className="p-4 border-b border-slate-700 bg-slate-800/50 shrink-0">
                 <div className="flex items-center justify-between">
                     <div
-                        className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity select-none group"
+                        className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity select-none"
                         onClick={() => setShowInfoModal(true)}
                     >
-                        <div className="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white shadow-sm group-hover:bg-cyan-700 transition-colors">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <path d="M2 12h4l3-9 3 18 3-9h4" />
                             </svg>
                         </div>
-                        <h1 className="font-mono text-xl font-black tracking-tight text-gray-900 leading-none">SEISMOS</h1>
-
-                        <button
-                            className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center ml-1 group-hover:bg-cyan-100 group-hover:text-cyan-700 transition-colors"
-                            title="Sistem Mimarisi ve INSD Hakkında Bilgi"
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="16" x2="12" y2="12"></line>
-                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                            </svg>
-                        </button>
+                        <h1 className="font-semibold text-lg text-slate-100">SEISMOS</h1>
                     </div>
                     <Badge
                         variant="outline"
                         onClick={toggleSimulation}
-                        className={`font-mono text-xs font-bold px-3 py-1 border-2 cursor-pointer transition-all hover:scale-105 active:scale-95 select-none ${isSimulationMode
-                            ? 'bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100'
-                            : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                        className={`text-xs font-medium px-3 py-1 cursor-pointer transition-colors ${isSimulationMode
+                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
                             }`}
-                        title="Veri Kaynağını Değiştir (Simülasyon / Fiziksel)"
                     >
-                        {isSimulationMode ? 'SİMÜLASYON' : 'FİZİKSEL'}
+                        {isSimulationMode ? 'Simülasyon' : 'Fiziksel'}
                     </Badge>
                 </div>
             </div>
 
             <SystemInfoModal isOpen={showInfoModal} onClose={() => setShowInfoModal(false)} />
 
-            <div className="flex-1 overflow-y-auto bg-background">
+            <div className="flex-1 overflow-y-auto">
                 {!node ? (
-                    /* SYSTEM DASHBOARD VIEW (Default) */
-                    <div className="p-6 space-y-4 animate-in fade-in duration-300">
+                    /* SYSTEM DASHBOARD VIEW */
+                    <div className="p-4 space-y-4">
+                        {/* Stats Grid */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
-                                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Nodes</div>
-                                <div className="font-mono text-2xl font-bold text-cyan-700">{activeNodeCount}</div>
+                            <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+                                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Aktif Nodelar</div>
+                                <div className="text-2xl font-bold text-slate-100 tabular-nums">{activeNodeCount}</div>
                             </div>
-                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
-                                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Pik Şiddet</div>
-                                <div className={`font-mono text-2xl font-bold ${peakMagnitude > 0.5 ? 'text-orange-600' : 'text-emerald-600'}`}>
+                            <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+                                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Pik Şiddet</div>
+                                <div className={`text-2xl font-bold tabular-nums ${peakMagnitude > 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
                                     {peakMagnitude.toFixed(3)}g
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <span className="text-xs font-mono uppercase text-gray-500">Sistem Sağlığı</span>
-                            <div className="flex items-center gap-2">
-                                <span style={{ color: healthConfig.color }}>{healthConfig.icon}</span>
-                                <span className="font-mono text-sm font-bold" style={{ color: healthConfig.color }}>
-                                    {healthConfig.label}
-                                </span>
+                        {/* System Health */}
+                        <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs uppercase tracking-wider text-slate-500">Sistem Durumu</span>
+                                <div className="flex items-center gap-2">
+                                    <div
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: healthConfig.color }}
+                                    />
+                                    <span className="text-sm font-medium" style={{ color: healthConfig.color }}>
+                                        {healthConfig.label}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
-
-
-                        <div className="mt-8 pt-8 border-t border-dashed border-gray-200 text-center">
-                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-50 mb-3 text-gray-400">
+                        {/* Empty State */}
+                        <div className="mt-8 pt-8 border-t border-slate-700 text-center">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-800 mb-3 text-slate-500">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                     <circle cx="12" cy="10" r="3" />
                                 </svg>
                             </div>
-                            <p className="text-xs text-gray-500 max-w-[200px] mx-auto">
-                                Detaylı sinyal analizi ve yapısal durum kontrolü için haritadan bir node seçin.
+                            <p className="text-sm text-slate-500 max-w-[200px] mx-auto">
+                                Detaylı analiz için haritadan bir bina seçin
                             </p>
                         </div>
                     </div>
                 ) : (
-                    /* NODE DETAILS VIEW (Selected) */
-                    <div className="p-6 space-y-6 animate-in slide-in-from-right-4 duration-300">
-                        {/* Selected Node Header */}
-                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    /* NODE DETAILS VIEW */
+                    <div className="p-4 space-y-4">
+                        {/* Node Header */}
+                        <div className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700">
                             <div>
-                                <h2 className="font-mono text-lg font-bold text-gray-900 flex items-center gap-2">
-                                    {node.name}
-                                </h2>
-                                <div className="text-[10px] font-mono text-gray-500">ID: {node.id}</div>
+                                <h2 className="font-semibold text-slate-100">{node.name}</h2>
+                                <div className="text-[10px] text-slate-500 font-mono">{node.id}</div>
                             </div>
                             <button
                                 onClick={() => selectNode(null)}
-                                className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-200 rounded-full transition-colors"
-                                title="Kapat ve Ana Ekrana Dön"
+                                className="text-slate-500 hover:text-slate-100 p-2 hover:bg-slate-700 rounded-lg transition-colors"
                             >
-                                ✕
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
                             </button>
                         </div>
 
-                        <Separator className="bg-gray-200" />
+                        {/* HERO DAMAGE SCORE */}
+                        {processedResult?.damageScore && (
+                            <div className={`rounded-lg border p-4 ${getScoreStyle(processedResult.damageScore.score).light} ${getScoreStyle(processedResult.damageScore.score).border}`}>
+                                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Hasar Skoru</div>
 
-                        {/* STATUS BADGE */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-mono uppercase text-gray-500">Durum</span>
-                            <Badge
-                                className={`font-mono uppercase tracking-wider shadow-none ${node.status === 'stable' ? 'bg-green-500/10 text-green-600' :
-                                    node.status === 'anomaly' ? 'bg-yellow-500/10 text-yellow-600' :
-                                        node.status === 'warning' ? 'bg-orange-500/10 text-orange-600' :
-                                            'bg-red-500/10 text-red-600'
-                                    }`}
-                            >
-                                {node.status === 'stable' ? 'STABİL' :
-                                    node.status === 'anomaly' ? 'ANOMALİ' :
-                                        node.status === 'warning' ? 'UYARI' : 'KRİTİK'}
-                            </Badge>
+                                <div className="flex items-end justify-between mb-3">
+                                    <div className="flex items-baseline gap-1">
+                                        <span className={`text-5xl font-bold tabular-nums ${getScoreStyle(processedResult.damageScore.score).text}`}>
+                                            {processedResult.damageScore.score}
+                                        </span>
+                                        <span className="text-slate-500 text-lg">/100</span>
+                                    </div>
+                                    <Badge className={`${getScoreStyle(processedResult.damageScore.score).light} ${getScoreStyle(processedResult.damageScore.score).text} border-0 font-medium`}>
+                                        {processedResult.damageScore.categoryLabel}
+                                    </Badge>
+                                </div>
+
+                                {/* Progress Bar */}
+                                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-4">
+                                    <div
+                                        className={`h-full transition-all duration-300 ${getScoreStyle(processedResult.damageScore.score).bg}`}
+                                        style={{ width: `${processedResult.damageScore.score}%` }}
+                                    />
+                                </div>
+
+                                {/* Component Scores */}
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="text-center bg-slate-800/50 rounded p-2">
+                                        <div className="text-[9px] uppercase text-slate-500">Frekans</div>
+                                        <div className="text-sm font-bold text-slate-300 tabular-nums">
+                                            {processedResult.damageScore.components.frequencyShiftScore}
+                                        </div>
+                                    </div>
+                                    <div className="text-center bg-slate-800/50 rounded p-2">
+                                        <div className="text-[9px] uppercase text-slate-500">Enerji</div>
+                                        <div className="text-sm font-bold text-slate-300 tabular-nums">
+                                            {processedResult.damageScore.components.peakEnergyScore}
+                                        </div>
+                                    </div>
+                                    <div className="text-center bg-slate-800/50 rounded p-2">
+                                        <div className="text-[9px] uppercase text-slate-500">Süre</div>
+                                        <div className="text-sm font-bold text-slate-300 tabular-nums">
+                                            {processedResult.damageScore.components.durationScore}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Fatigue Warning */}
+                        {processedResult?.fatigueIndicator?.hasWarning && (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
+                                <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div>
+                                    <div className="text-sm font-medium text-amber-400">Yapısal Yorgunluk Tespit Edildi</div>
+                                    <div className="text-xs text-amber-400/70 mt-0.5">
+                                        Trend: {(processedResult.fatigueIndicator.trendSlope * 1000).toFixed(2)} mHz/örnek
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Pipeline Status */}
+                        <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Sinyal İşleme</div>
+                            <ValidationHUD />
                         </div>
 
-                        {/* SIGNAL PIPELINE */}
-                        <section>
-                            <h3 className="text-xs font-mono uppercase text-gray-500 mb-3">Sinyal İşleme</h3>
-                            <ValidationHUD />
-                        </section>
-
-                        <Separator className="bg-gray-200" />
-
-                        {/* SPECTRUM ANALYSIS */}
-                        <section>
-                            <h3 className="text-xs font-mono uppercase text-gray-500 mb-3">Frekans Analizi</h3>
-                            <div className="border border-gray-200 rounded overflow-hidden shadow-sm bg-white">
-                                <FFTDisplay nodeId={selectedNodeId!} width={350} height={180} />
+                        {/* FFT Display */}
+                        {selectedNodeId && (
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Spektrum Analizi</div>
+                                <FFTDisplay nodeId={selectedNodeId} width={320} height={100} />
                             </div>
-                        </section>
+                        )}
 
-                        {/* TELEMETRY */}
-                        <section className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-white border border-gray-200 rounded shadow-sm">
-                                <div className="text-[10px] text-gray-500 uppercase">X-Ekseni</div>
-                                <div className="font-mono font-bold text-gray-900">{reading?.accel_x.toFixed(3) ?? '0.000'}</div>
-                            </div>
-                            <div className="p-3 bg-white border border-gray-200 rounded shadow-sm">
-                                <div className="text-[10px] text-gray-500 uppercase">Y-Ekseni</div>
-                                <div className="font-mono font-bold text-gray-900">{reading?.accel_y.toFixed(3) ?? '0.000'}</div>
-                            </div>
-                            <div className="p-3 bg-white border border-gray-200 rounded shadow-sm col-span-2">
-                                <div className="text-[10px] text-gray-500 uppercase">Z-Ekseni (Dikey)</div>
-                                <div className="font-mono font-bold text-gray-900">{reading?.accel_z.toFixed(3) ?? '0.000'}</div>
-                            </div>
-                        </section>
-
-                        {/* METADATA */}
-                        <section className="bg-gray-50 p-4 rounded border border-gray-200">
-                            <h3 className="text-xs font-mono uppercase text-gray-500 mb-3">Konum Verisi</h3>
-                            <div className="space-y-2 text-xs font-mono">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Enlem</span>
-                                    <span className="text-gray-900">{node.lat.toFixed(5)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">Boylam</span>
-                                    <span className="text-gray-900">{node.lng.toFixed(5)}</span>
+                        {/* Telemetry */}
+                        {reading && (
+                            <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+                                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Telemetri</div>
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                    <div>
+                                        <div className="text-xs text-slate-500">X</div>
+                                        <div className="font-mono text-sm text-slate-300">{reading.accel_x.toFixed(4)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500">Y</div>
+                                        <div className="font-mono text-sm text-slate-300">{reading.accel_y.toFixed(4)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500">Z</div>
+                                        <div className="font-mono text-sm text-slate-300">{reading.accel_z.toFixed(4)}</div>
+                                    </div>
                                 </div>
                             </div>
-                        </section>
+                        )}
                     </div>
                 )}
             </div>

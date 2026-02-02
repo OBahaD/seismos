@@ -1,0 +1,415 @@
+Bu proje, deprem riski altındaki şehirlerde bina bazlı, sürekli ve otonom yapı sağlığı
+izleme sağlamayı amaçlayan dağıtık bir izleme sistemidir. Sistem, mahalle ölçeğinde
+konumlandırılmış sensör node’ları aracılığıyla binaların yapısal durumunu zaman içinde
+takip eder ve deprem anında gerçek zamanlı hasar tespiti yaparak kriz yönetimine
+doğrudan veri sağlar.
+Her binanın taşıyıcı sistemine (kolon veya betonarme perde) mekanik olarak
+bütünleşmiş bir sensör node yerleştirilir. Bu node, binanın maruz kaldığı mikro
+titreşimleri (rüzgâr, trafik, insan hareketi gibi) uzun süre boyunca ölçerek yapının
+dinamik parmak izini çıkarır. Doğal frekans, sönümleme ve elastik davranış gibi fiziksel
+göstergeler zaman içinde izlenir ve böylece binanın yapısal güvenilirliği nicel olarak
+değerlendirilir. Bu sayede deprem olmadan önce dahi yapı yorgunluğu ve gizli hasar
+belirtileri tespit edilebilir.
+Node’lar normal koşullarda düşük enerji tüketimiyle çalışır ve elde ettikleri özet verileri
+merkezi izleme sistemine iletir. Sistem, tekil cihazlara değil mahalle ölçeğinde
+istatistiksel tutarlılığa dayanır. Binalar birbirleriyle doğrudan iletişim kurmaz; ancak aynı
+fiziksel olayı farklı noktalardan ölçtükleri için veriler merkezi veya edge analiz
+katmanında birlikte değerlendirilir.
+Sismik bir olay algılandığında node’lar yüksek frekanslı ölçüm moduna geçer ve deprem
+anındaki maksimum ivme, göreli kat ötelemesi ve kalıcı deformasyon gibi kritik
+parametreleri analiz eder. Bu analiz büyük ölçüde cihaz üzerinde gerçekleştirilir (edge
+computing) ve bina, “güvenli”, “hasarlı” veya “ağır hasarlı” gibi net bir durum sınıfına
+atanır.
+Deprem sırasında klasik iletişim altyapısı devre dışı kalsa bile, sistem Turkcell’in NB-IoT
+(Dar Bant IoT) altyapısı sayesinde veri iletimine devam eder. Gerekli durumlarda
+Dronecell gibi geçici baz istasyonlarıyla bağlantı kurularak enkaz altında kalan veya
+bodrum katlardaki node’lardan dahi durum bilgisi alınabilir. Bir node’un susması
+durumunda, çevredeki binalardan gelen sismik veriler ve eksik sağlık sinyalleri birlikte
+değerlendirilerek olası yıkım dolaylı olarak teyit edilir.
+Bu mimari sayesinde sistem, tekil cihaz kayıplarına karşı dayanıklı, kendi kendini
+doğrulayabilen ve afet anında mahalle bazında kesintisiz durum farkındalığı sağlayan
+bir yapıya kavuşur. Proje, bireysel sensörlerden ziyade dağıtık ve rol-adaptif bir bina ağı
+yaklaşımıyla, afet yönetimi ekiplerine hızlı, güvenilir ve doğrudan operasyonel karar
+desteği sunmayı hedefler.
+
+Bir node sustuğunda diğerleri bunu nasıl
+anlıyor?
+Cevap: Doğrudan değil, dolaylı sinyaller üzerinden.​
+Buna sistem içinde şu isim verilir:
+Implicit Node Silence Detection (INSD)
+
+1️⃣ Temel prensip (çok kritik)
+Node’lar “A binası sustu mu?” diye birbirine sormaz.
+Bunun yerine:
+●​ Merkez
+●​ Edge algoritması​
+olması gereken davranış ile olan davranış arasındaki farkı yakalar.
+
+2️⃣ Dolaylı farkındalık nasıl oluşur? (3 ana kanal)
+
+🔹 KANAL 1 — Olay korelasyonu (Event Correlation Gap)
+Deprem olduğunda:
+●​ Aynı mahalledeki tüm binalar
+○​ benzer zaman damgalı
+○​ benzer frekans bandında
+○​ benzer enerji seviyesinde​
+titreşim görür.
+Senaryo:
+●​ Bina A → hiç rapor yok
+●​ Bina B, C, D → “şiddetli sarsıntı yaşadım”
+
+➡️ Sistem şunu der:
+
+“Bu bölgede fiziksel olarak hissedilen bir olay var ama A node’u yok.”
+Bu, birinci şüphe bayrağıdır.
+
+🔹 KANAL 2 — Heartbeat / Health Ping eksikliği
+Her node:
+●​ Normal zamanda
+●​ ve deprem sonrası​
+belirli aralıklarla çok küçük bir “yaşıyorum” paketi gönderir.
+Bu bir veri akışı değil, nabız atışıdır.
+Eğer:
+●​ Deprem sonrası X dakika boyunca
+●​ Heartbeat gelmezse
+
+➡️ Node “suskun” olarak işaretlenir.
+Ama tek başına karar verilmez.
+
+🔹 KANAL 3 — Komşu davranış anomalisı (Neighborhood Anomaly)
+Bu en kritik ve “swarm” kısmı.
+Örnek:
+●​ Bina B ve C:
+○​ “Yanımda çok büyük bir kütle aniden yok oldu”
+○​ İvme ve frekans imzalarında ani bir yük boşalması görüyor
+Bu ne demek?
+●​ Yan binanın çökmesiyle:
+○​ Zemin-gerilme dağılımı değişir
+○​ Komşu binaların titreşim karakteri anlık olarak farklılaşır
+
+➡️ Bu fiziksel olarak ölçülebilir bir fenomendir.
+
+3️⃣ Bu üç sinyal nasıl birleşiyor?
+
+Merkez veya edge logic şu kuralı uygular:
+IF
+(Event detected by ≥ N neighbors)
+AND
+(Node A heartbeat missing)
+AND
+(Local vibration pattern shows anomaly)
+THEN
+Node A status = Probable Collapse
+
+Bu tek node’a dayalı değil,​
+çoklu kanıta dayalı bir teyit.
+
+4️⃣ “Ama node’lar birbirine bağlı değilse bunu kim
+görüyor?”
+Altın cevap
+
+👇
+
+●​ Node’lar merkeze konuşur
+●​ Merkez:
+○​ zaman damgalarını
+○​ coğrafi konumu
+○​ olay yoğunluğunu​
+eşleştirir
+Ama:
+●​ Eğer merkez geçici olarak yoksa:
+○​ Bu mantığın basitleştirilmiş hali
+○​ node içinde çalışır
+○​ ilk bağlantı kurulduğunda raporlanır
+Yani:
+Merkezi zekâ var, ama tek noktaya bağımlı değil.
+
+6️⃣ Tek paragrafla sade anlatım (ister sunumda kullan)
+Bir node’un susması, sistem tarafından doğrudan değil, çevresindeki fiziksel
+olayların korelasyonu üzerinden algılanır. Aynı bölgede sarsıntı raporlayan node’lar
+varken bir node’un hem olay raporu hem de periyodik sağlık sinyali göndermemesi,
+yapısal bir arıza veya yıkım ihtimalini doğurur. Bu durum, komşu binalarda
+gözlemlenen titreşim anomalileriyle birlikte değerlendirilerek olası yıkım olarak
+sınıflandırılır.
+
+SEISMOS
+Yapay Zekâ Destekli Yapısal Sağlık İzleme ve Afet Dijital
+Triyaj Platformu
+
+1. GİRİŞ: SESSİZ RİSK, GÖRÜNMEZ TEHLİKE
+Türkiye, dünyanın en aktif deprem kuşaklarından birinde yer almaktadır. Buna rağmen mevcut
+afet yönetimi pratikleri, büyük ölçüde deprem sonrası insan temelli bildirimlere ve zaman
+alan saha tespitlerine dayanmaktadır. Depremin hemen ardından yaşanan bilgi kirliliği, iletişim
+kesintileri ve koordinasyon eksikliği, “altın saatler” olarak adlandırılan ilk 72 saat içerisinde
+müdahalenin etkinliğini ciddi biçimde düşürmektedir.
+Bugün karşı karşıya olduğumuz temel sorun şudur:
+Hangi bina yıkıldı? Hangisine girilebilir? Hangisi zaten risk altındaydı?
+Bu soruların cevabı çoğu zaman günler sonra netleşmektedir. Oysa can kayıplarının büyük
+bölümü, bu kritik zaman aralığında yaşanmaktadır.
+SEISMOS, bu bilgi körlüğünü ortadan kaldırmak amacıyla geliştirilmiş, binaları yaşayan birer
+veri kaynağına dönüştüren yeni nesil bir yapısal izleme ve afet triyaj sistemidir.
+
+2. SEISMOS NEDİR?
+SEISMOS, binaların taşıyıcı sistemlerine entegre edilen akıllı IoT sensörleri aracılığıyla,
+yapıların titreşim davranışlarını sürekli olarak izleyen, bu verileri yapay zekâ ile analiz eden
+ve hem deprem öncesi risk tespiti hem de deprem anı otomatik hasar sınıflandırması
+yapan bütüncül bir platformdur.
+Sistem, klasik afet uygulamalarının aksine insanlardan veri toplamaz; doğrudan binanın
+kendisini dinler. Bu yaklaşım, kullanıcı davranışına, internet bağlantısına veya mobil cihazlara
+bağımlı olmayan, objektif ve kesintisiz bir veri akışı sağlar.
+SEISMOS’un temel felsefesi şudur:
+“Afeti insanlardan değil, yapılardan öğrenmek.”
+
+3. PROBLEM TANIMI
+3.1 Deprem Sonrası Bilgi Kaosu
+Deprem sonrasında hangi binanın yıkıldığına veya ağır hasar aldığına dair bilgi çoğu zaman:
+●​ Vatandaş ihbarlarına,​
+
+●​ Görsel teyitlere,​
+●​ Manuel saha taramalarına dayanır.​
+Bu yöntemler:
+●​ Zaman alıcıdır​
+●​ Yanlıştır​
+●​ Koordinasyonsuzdur​
+
+3.2 Deprem Öncesi Görünmez Risk
+Binalar zamanla:
+●​ Beton yorulması,​
+●​ Donatı korozyonu,​
+●​ Zemin-üst yapı etkileşimi​
+nedeniyle taşıyıcı kapasitelerini kaybeder. Ancak bu süreç, gözle görülmez. Mevcut sistemler,
+binanın yapısal yorgunluğunu sürekli izleyebilecek düşük maliyetli ve yaygın bir çözüm
+sunmamaktadır.
+
+4. ÇÖZÜM: BİNALARIN EKG’Sİ
+Her binanın, tıpkı insan kalbi gibi, kendine özgü bir doğal titreşim frekansı vardır. Yapı sağlıklı
+olduğunda bu frekans stabildir. Yapı rijitliğini kaybettikçe, bu frekansta ölçülebilir değişimler
+meydana gelir.
+SEISMOS, bu fiziksel prensibi temel alır.
+
+4.1 Donanım Katmanı
+●​ Binaların bodrum katındaki ana taşıyıcı kolonlara monte edilen,​
+●​ Hassas ivmeölçerler içeren,​
+●​ Düşük enerji tüketimli,​
+
+●​ Uzun ömürlü IoT modülleri​
+binanın titreşimlerini 7/24 izler.
+Bu cihazlar:
+●​ Ses kaydetmez​
+●​ Görüntü almaz​
+●​ Kişisel veri toplamaz​
+Sadece yapının mekanik davranışını ölçer.
+
+5. DEPREM ÖNCESİ: YAPISAL YORGUNLUK TAKİBİ
+SEISMOS, binanın titreşim verilerini zaman içinde analiz ederek:
+●​ Doğal periyottaki mikroskobik değişimleri,​
+●​ Frekans kaymalarını,​
+●​ Sönümleme oranlarını​
+tespit eder.
+Bu veriler, teorik yapı modelleri ve bölgesel referanslarla karşılaştırılır. Eğer binanın
+davranışında anormal bir yumuşama tespit edilirse sistem, henüz bir deprem olmadan:
+“Bu bina riskli, güçlendirme gerekli.”
+
+uyarısı üretir.
+Bu sayede:
+●​ Önleyici bakım mümkün hale gelir​
+●​ Kentsel dönüşüm kararları veriyle desteklenir​
+●​ Ani yıkım riski azaltılır​
+
+6. DEPREM ANI: DİJİTAL YAPISAL TRİYAJ
+Deprem gerçekleştiği anda SEISMOS sistemi devreye girer.
+
+6.1 Gürültü Ayrıştırma
+Sistem, yapay zekâ destekli sinyal işleme algoritmalarıyla:
+●​ Kamyon geçişi,​
+●​ İnşaat titreşimi,​
+●​ Çevresel gürültü​
+ile gerçek sismik dalgaları ayırt eder.
+
+6.2 Anlık Hasar Analizi
+Sarsıntı sona erdiği anda, sistem binanın davranışını analiz eder ve yapıyı otomatik olarak
+sınıflandırır:
+●​ Yeşil: Girilebilir​
+●​ Sarı: Ağır hasarlı​
+●​ Kırmızı: Yıkıldı / Girilmez​
+Bu sınıflandırma, insan müdahalesi olmadan, saniyeler içinde yapılır.
+
+7. İLETİŞİM ALTYAPISI: NB-IoT AVANTAJI
+SEISMOS, Turkcell’in NB-IoT (Dar Bant Nesnelerin İnterneti) altyapısını kullanır.
+Bu tercih kritiktir çünkü NB-IoT:
+●​ Betonarme yapılarda yüksek penetrasyon sağlar​
+●​ Enkaz altında dahi veri iletebilir​
+●​ GSM ve internet yoğunluğundan etkilenmez​
+
+●​ Çok düşük enerji tüketir​
+Deprem anında cep telefonları çalışmazken, SEISMOS cihazları merkeze veri göndermeye
+devam eder.
+
+8. AFAD VE KURUMLAR İÇİN OPERASYONEL PANEL
+Toplanan veriler, merkezi bir kontrol panelinde görselleştirilir.
+Bu panel:
+●​ Mahalle bazlı hasar haritaları,​
+●​ Gerçek zamanlı bina durumları,​
+●​ Önceliklendirilmiş müdahale listeleri​
+sunar.
+Arama-kurtarma ekipleri:
+●​ Rastgele değil​
+●​ Veriye dayalı​
+●​ Nokta atışı müdahale yapar​
+Bu da doğrudan can kaybının azalması anlamına gelir.
+
+9. HEDEF KİTLE VE PAYDAŞLAR
+●​ AFAD ve Arama Kurtarma Birimleri​
+●​ Belediyeler​
+●​ Çevre, Şehircilik ve İklim Değişikliği Bakanlığı​
+●​ Sigorta Şirketleri (DASK)​
+●​ Bina yönetimleri ve site sakinleri​
+
+10. TOPLUMSAL, EKONOMİK VE PSİKOLOJİK ETKİ
+SEISMOS:
+●​ Afet yönetimini reaktif yapıdan proaktif yapıya taşır​
+●​ Vatandaşların “evim güvenli mi?” sorusuna veri temelli cevap verir​
+●​ Deprem sonrası panik ve belirsizliği azaltır​
+●​ Milli yapı stokunun ömrünü uzatır​
+●​ Sigorta ve kentsel dönüşüm politikalarına veri sağlar​
+
+11. SÜRDÜRÜLEBİLİRLİK VE VERİ GÜVENLİĞİ
+●​ Cihazlar enerji hasadı prensipleriyle uzun yıllar çalışabilir​
+●​ Kişisel veri toplanmaz​
+●​ Veriler uçtan uca şifrelenir​
+●​ KVKK ve ilgili mevzuata tam uyum sağlanır​
+
+12. GELECEK VİZYONU
+SEISMOS, yalnızca bir sensör sistemi değil; dirençli şehirler için dijital bir altyapıdır.
+Gelecekte:
+●​ Şehir direnç endeksleri​
+●​ Akıllı bina pasaportları​
+●​ Sigorta entegrasyonları​
+
+●​ Uluslararası afet ihracatı​
+ile ölçeklenebilir bir platforma dönüşmesi hedeflenmektedir.
+
+13. SONUÇ
+SEISMOS, deprem gerçeğiyle yaşayan toplumlar için geliştirilmiş, sessiz ama sürekli çalışan,
+insandan bağımsız, veriye dayalı bir erken uyarı ve müdahale sistemidir.
+Bu proje:
+Depremi beklemez,
+Binayı dinler,
+Ve zamanı kurtarır.
+
+1. TEKNİK MİMARİ VE SİSTEM YAPISI
+SEISMOS projesi, afet öncesi ve afet anında bina davranışını analiz etmek üzere tasarlanmış,
+üç katmanlı modüler bir sistem mimarisine sahiptir:
+1.​ Uç Birim (Edge / IoT Sensör Katmanı)​
+2.​ İletişim ve Veri Aktarım Katmanı​
+3.​ Merkezi Analitik ve Yapay Zekâ Katmanı​
+Bu mimari yapı, sistemin düşük maliyetle yaygınlaştırılabilmesini, afet koşullarında çalışmaya
+devam etmesini ve şehir ölçeğinde yönetilebilmesini mümkün kılmaktadır.
+
+2. UÇ BİRİM (EDGE) – DONANIM MİMARİSİ
+2.1 Donanım Bileşenleri
+Her bir SEISMOS sensör düğümü aşağıdaki temel bileşenlerden oluşmaktadır:
+●​ 3 eksenli MEMS tabanlı ivmeölçer sensör​
+●​ Düşük güç tüketimli mikrodenetleyici (ARM tabanlı)​
+●​ NB-IoT haberleşme modülü​
+
+●​ Uzun ömürlü batarya ve enerji yönetim devresi​
+Sensörler, binanın bodrum katında bulunan ana taşıyıcı kolonlara monte edilmektedir. Bu
+yerleşim, binanın genel titreşim karakteristiğini doğru şekilde yakalamayı ve çevresel gürültünün
+etkisini azaltmayı amaçlamaktadır.
+
+2.2 Sensör Yerleşim Prensibi
+Sensörler, binanın rijitlik merkezine en yakın kolonlara sabitlenir. Bu sayede:
+●​ Binanın doğal salınım periyodu doğru ölçülür​
+●​ Lokal titreşimler (asansör, iç mekân hareketleri) filtrelenir​
+●​ Yapının global davranışı analiz edilir​
+Cihazlar fiziksel sabotaja karşı epoksi ile sabitlenir ve sökülme durumunda anomali algılama
+algoritmaları devreye girer.
+
+3. EDGE ÜZERİNDE VERİ İŞLEME (EDGE COMPUTING)
+SEISMOS sisteminde ham titreşim verisi sürekli olarak merkeze gönderilmez. Bunun yerine,
+sensör cihazı üzerinde ön işleme yapılır.
+Cihaz üzerinde gerçekleştirilen işlemler şunlardır:
+●​ Zaman alanında gürültü filtreleme​
+●​ Titreşim verisinin pencereleme yöntemiyle segmentlere ayrılması​
+●​ Hızlı Fourier Dönüşümü (FFT) ile frekans alanına dönüştürme​
+●​ Doğal frekans, genlik ve sönüm oranı gibi yapısal özelliklerin çıkarılması​
+Bu yaklaşım, veri trafiğini azaltır, batarya ömrünü uzatır ve sistemin afet anında çalışmaya
+devam etmesini sağlar.
+
+4. YAPAY ZEKÂ VE MAKİNE ÖĞRENMESİ ALTYAPISI
+4.1 Yapay Zekâ Kullanım Gerekçesi
+Klasik eşik bazlı titreşim sistemleri, çevresel gürültüyü (kamyon geçişi, inşaat çalışmaları vb.)
+deprem olarak algılayabilmektedir. Bu durum yanlış alarm oranlarını artırmakta ve sistemin
+güvenilirliğini düşürmektedir.
+SEISMOS, bu sorunu yapay zekâ destekli öğrenen modellerle çözmektedir.
+
+4.2 Kullanılan Model Yaklaşımı
+Sistem üç temel yapay zekâ yaklaşımı kullanır:
+●​ Zaman Serisi Sınıflandırma:​
+​
+Titreşim sinyallerinin desenleri analiz edilerek deprem, çevresel gürültü ve yapısal
+anomali ayrımı yapılır.​
+●​ Anomali Tespiti:​
+​
+Her bina için “normal davranış profili” oluşturulur. Bu profilden sapmalar otomatik olarak
+risk sinyali olarak işaretlenir.​
+●​ Bölgesel Mutabakat (Consensus) Algoritması:​
+​
+Tek bir binadan gelen veri yeterli görülmez. Aynı mahallede bulunan birden fazla
+sensörden eş zamanlı veri alınmadan “kesin deprem” kararı üretilmez.​
+Bu yaklaşım, yanlış alarm oranını ciddi ölçüde düşürmektedir.
+
+5. DEPREM ANI HASAR ANALİZİ VE KARAR
+MEKANİZMASI
+Deprem algılandığında sistem şu analizleri gerçekleştirir:
+●​ Deprem öncesi ve sonrası doğal frekans karşılaştırması​
+●​ Enerji sönümleme davranışı analizi​
+●​ Yapısal rijitlik değişiminin hesaplanması​
+
+Bu analizler sonucunda bina için sayısal bir Hasar Skoru üretilir.
+
+Hasar Sınıflandırması:
+●​ 0–30: Güvenli​
+●​ 30–60: Riskli​
+●​ 60 ve üzeri: Ağır Hasarlı​
+Bu sınıflandırma, görsel inceleme yapılmadan, saniyeler içinde oluşturulur.
+
+6. İLETİŞİM ALTYAPISI VE NB-IoT KULLANIMI
+SEISMOS, veri iletimi için NB-IoT teknolojisini kullanmaktadır. NB-IoT’nin tercih edilme nedenleri
+şunlardır:
+●​ Betonarme yapılarda yüksek penetrasyon kabiliyeti​
+●​ Afet anında GSM şebekesine göre daha dayanıklı yapı​
+●​ Düşük enerji tüketimi​
+●​ Çok sayıda cihazın eş zamanlı çalışmasına uygunluk​
+Bu sayede sistem, elektrik ve internet kesintilerinde dahi veri iletimini sürdürebilir.
+
+7. MERKEZİ SİSTEM VE VERİ YÖNETİMİ
+Merkezi sistem, mikroservis mimarisiyle tasarlanmıştır. Veri akışı aşağıdaki şekilde ilerler:
+Sensör → NB-IoT → Operatör Çekirdeği → Güvenli API → Analitik Motor → Görselleştirme
+Paneli
+Yetkili kurumlar için mahalle ve şehir bazlı hasar haritaları oluşturulur. Bireysel kullanıcılar ise
+mobil uygulama üzerinden sadeleştirilmiş bina sağlık skorunu görüntüler.
+
+8. GÜVENLİK, KVKK VE VERİ GİZLİLİĞİ
+SEISMOS sistemi:
+●​ Kişisel veri (ses, görüntü, kimlik bilgisi) toplamaz​
+●​ Sadece yapısal titreşim verisi işler​
+●​ Verileri uçtan uca şifreler​
+●​ Kimliksizleştirilmiş bina ID’leri kullanır​
+Bu yönüyle KVKK ve ilgili mevzuata tam uyumludur.
+
+9. TEKNİK UYGULANABİLİRLİK VE GERÇEKÇİLİK
+SEISMOS projesi:
+●​ Fizik ve yapı mühendisliği prensiplerine dayanır​
+●​ Akademik literatürde karşılığı olan yöntemler kullanır​
+●​ Mevcut donanım ve haberleşme teknolojileriyle uygulanabilir durumdadır​
+Projeyi özgün kılan unsur, bu teknolojilerin ilk kez konut ölçeğinde, afet öncesi ve afet anını
+birlikte kapsayacak şekilde bütünleşik olarak uygulanmasıdır.
+
+10. SONUÇ
+SEISMOS, afet yönetimini reaktif bir yapıdan çıkararak, veriye dayalı ve proaktif bir sisteme
+dönüştürmeyi amaçlayan, teknik olarak uygulanabilir ve ölçeklenebilir bir çözümdür. Proje,
+şehirlerin afetlere karşı dirençli hale getirilmesine somut ve ölçülebilir katkı sunmaktadır.
+
+
