@@ -90,6 +90,7 @@ export class EarthquakeSimulator {
     private liveReadings: Map<string, SensorReading> = new Map();
     private updateCallbacks: Set<(readings: Map<string, SensorReading>) => void> = new Set();
     private earthquakeInterval: ReturnType<typeof setInterval> | null = null;
+    private idleInterval: ReturnType<typeof setInterval> | null = null;
 
     // Canlı okuma dinleyicisi ekle
     onLiveUpdate(callback: (readings: Map<string, SensorReading>) => void): () => void {
@@ -104,7 +105,7 @@ export class EarthquakeSimulator {
 
     // Normal durum - çok düşük titreşim
     generateIdleReading(nodeId: string): SensorReading {
-        const noise = 0.002;
+        const noise = 0.003;
         const accelX = (Math.random() - 0.5) * noise;
         const accelY = (Math.random() - 0.5) * noise;
         const accelZ = (Math.random() - 0.5) * noise;
@@ -115,8 +116,36 @@ export class EarthquakeSimulator {
             accelY,
             accelZ,
             magnitude: Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2),
-            frequency: 4.5 + Math.random() * 1.0, // 4.5-5.5 Hz (normal bina frekansı)
+            frequency: 4.5 + Math.random() * 1.0,
         };
+    }
+
+    // Arka plan simülasyonu başlat - sürekli idle okuma
+    startIdleSimulation(): void {
+        if (this.idleInterval) return;
+
+        // İlk okumaları oluştur
+        DEMO_NODES.forEach((node) => {
+            this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+        });
+        this.emitUpdate();
+
+        // Her 200ms'de bir güncelle (deprem harici)
+        this.idleInterval = setInterval(() => {
+            if (this.earthquakeInterval) return; // Deprem varsa atla
+
+            DEMO_NODES.forEach((node) => {
+                this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+            });
+            this.emitUpdate();
+        }, 200);
+    }
+
+    stopIdleSimulation(): void {
+        if (this.idleInterval) {
+            clearInterval(this.idleInterval);
+            this.idleInterval = null;
+        }
     }
 
     // Deprem simülasyonu

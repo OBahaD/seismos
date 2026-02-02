@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import { useSeismosStore } from '@/lib/store';
-import { DEMO_NODES } from '@/lib/simulator';
+import { DEMO_NODES, earthquakeSimulator } from '@/lib/simulator';
 import DashboardPanel from '@/components/dashboard/DashboardPanel';
 
 const SeismicMap = dynamic(() => import('@/components/map/SeismicMap'), {
@@ -23,8 +23,15 @@ export default function Home() {
     if (isInitialized.current) return;
     isInitialized.current = true;
 
-    // Node'ları yükle (bu aynı zamanda rastgele base skorları oluşturur)
+    // Node'ları yükle
     setNodes(DEMO_NODES as any);
+
+    // Arka plan sensör simülasyonunu başlat
+    earthquakeSimulator.startIdleSimulation();
+
+    return () => {
+      earthquakeSimulator.stopIdleSimulation();
+    };
   }, [setNodes]);
 
   return (
