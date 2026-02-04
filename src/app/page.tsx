@@ -19,9 +19,24 @@ const SeismicMap = dynamic(() => import('@/components/map/SeismicMap'), {
 });
 
 export default function Home() {
-  const { setNodes, updateHeartbeat, checkConsensus } = useSeismosStore();
+  const { setNodes, updateHeartbeat, checkConsensus, selectNode } = useSeismosStore();
   const isInitialized = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // URL'den nodeId parametresini oku
+  useEffect(() => {
+    // Sadece client tarafında çalışır
+    const params = new URLSearchParams(window.location.search);
+    const nodeId = params.get('nodeId');
+    if (nodeId) {
+      // Node'ların yüklendiğinden emin olmak için kısa bir gecikme
+      setTimeout(() => {
+        selectNode(nodeId);
+        // URL'i temizle
+        window.history.replaceState({}, '', '/');
+      }, 500);
+    }
+  }, [selectNode]);
 
   useEffect(() => {
     if (isInitialized.current) return;

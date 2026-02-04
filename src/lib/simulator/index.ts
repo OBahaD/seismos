@@ -286,6 +286,14 @@ export class EarthquakeSimulator {
                     fftSpectrum,
                     signalType: 'seismic',
                 });
+
+                // Frekans geçmişini güncelle (Trend grafiği için)
+                const history = this.frequencyHistory.get(node.id) || [];
+                history.push(seismicFreq);
+                if (history.length > EarthquakeSimulator.HISTORY_LENGTH) {
+                    history.shift();
+                }
+                this.frequencyHistory.set(node.id, history);
             });
 
             // Hasar > 85 olanların çökme (susma/sensor kaybı) ihtimali

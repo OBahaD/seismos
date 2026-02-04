@@ -45,12 +45,7 @@ export default function SidebarNavigation({ className = '', onCollapsedChange }:
       href: '/',
       enabled: true
     },
-    {
-      icon: Map,
-      label: 'Sismik Harita',
-      href: '/harita',
-      enabled: true
-    },
+
     {
       icon: Shield,
       label: 'Hasar Değerlendirme',
