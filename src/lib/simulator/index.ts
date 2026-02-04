@@ -11,13 +11,18 @@ export interface BuildingMetadata {
     sensorId: string;         // Sensör ID
 }
 
+// Sinyal tipi - AI tarafından sınıflandırılır
+export type SignalType = 'idle' | 'seismic' | 'noise' | 'anomaly';
+
 export interface SensorReading {
     timestamp: number;
     accelX: number;
     accelY: number;
     accelZ: number;
     magnitude: number;
-    frequency: number;
+    frequency: number;           // Dominant frekans (Hz)
+    fftSpectrum: number[];       // FFT spektrumu (0-10 Hz, 20 bin)
+    signalType: SignalType;      // AI sınıflandırması
 }
 
 // Balat bölgesi - denize taşmayan sıkı sınırlar
@@ -111,6 +116,24 @@ export class EarthquakeSimulator {
         this.updateCallbacks.forEach(cb => cb(this.liveReadings));
     }
 
+    // FFT Spektrumu Oluştur (20 bin, 0-10 Hz)
+    // peakHz: Dominant frekans, spread: Yayılım genişliği, amplitude: Tepe yüksekliği
+    private generateFFTSpectrum(peakHz: number, spread: number = 0.5, amplitude: number = 1): number[] {
+        const bins = 20; // 0-10 Hz arası, 0.5 Hz çözünürlük
+        const spectrum: number[] = [];
+
+        for (let i = 0; i < bins; i++) {
+            const hz = i * 0.5; // Her bin 0.5 Hz
+            // Gaussian benzeri tepe
+            const distance = Math.abs(hz - peakHz);
+            const value = amplitude * Math.exp(-((distance * distance) / (2 * spread * spread)));
+            // Küçük gürültü ekle
+            spectrum.push(Math.max(0, value + (Math.random() - 0.5) * 0.05));
+        }
+
+        return spectrum;
+    }
+
     // Normal durum - çok düşük titreşim
     // ARTIK HASARA GÖRE FREKANS ÜRETİYOR (Histeresis)
     generateIdleReading(nodeId: string): SensorReading {
@@ -127,13 +150,18 @@ export class EarthquakeSimulator {
         const accelY = (Math.random() - 0.5) * noise;
         const accelZ = (Math.random() - 0.5) * noise;
 
+        // FFT: Düşük amplitüdlü, hasara göre frekans tepesi
+        const fftSpectrum = this.generateFFTSpectrum(baseFrequency, 0.8, 0.3);
+
         return {
             timestamp: Date.now(),
             accelX,
             accelY,
             accelZ,
             magnitude: Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2),
-            frequency: baseFrequency + (Math.random() * 0.2), // Hafif varyasyon
+            frequency: baseFrequency + (Math.random() * 0.2),
+            fftSpectrum,
+            signalType: 'idle',
         };
     }
 
@@ -232,13 +260,20 @@ export class EarthquakeSimulator {
                 const accelY = (Math.random() - 0.5) * intensity;
                 const accelZ = (Math.random() - 0.5) * intensity + intensity * 0.2;
 
+                // Deprem sırasında frekans düşer (2-3 Hz bandında yoğunlaşır)
+                const seismicFreq = 2.5 + (Math.random() - 0.5);
+                // FFT: Yüksek amplitüdlü, düşük frekanslı tepe
+                const fftSpectrum = this.generateFFTSpectrum(seismicFreq, 1.2, 0.8 + envelope * 0.2);
+
                 this.liveReadings.set(node.id, {
                     timestamp: Date.now(),
                     accelX,
                     accelY,
                     accelZ,
                     magnitude: Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2),
-                    frequency: 4.5 - envelope * 1.5 + Math.random() * 0.5, // Frekans düşüşü
+                    frequency: seismicFreq,
+                    fftSpectrum,
+                    signalType: 'seismic',
                 });
             });
 
@@ -294,6 +329,57 @@ export class EarthquakeSimulator {
     reset(): void {
         this.deadNodes.clear();
         this.startIdleSimulation();
+    }
+
+    // 🚛 Kamyon Geçişi Simülasyonu (Gürültü Testi)
+    // Yüksek frekans + tek bina = AI tarafından filtrelenir
+    triggerTruckNoise(targetNodeId: string, onFilteredCallback: () => void): void {
+        let tickCount = 0;
+        const totalTicks = 40; // 2 saniye (50ms * 40)
+
+        // Find target node
+        const targetNode = DEMO_NODES.find(n => n.id === targetNodeId);
+        if (!targetNode || this.deadNodes.has(targetNodeId)) {
+            onFilteredCallback();
+            return;
+        }
+
+        const noiseInterval = setInterval(() => {
+            tickCount++;
+            const envelope = Math.sin((tickCount / totalTicks) * Math.PI);
+
+            // Yüksek frekanslı titreşim (8-10 Hz - kamyon/trafik bandı)
+            const noiseFreq = 8.5 + Math.random();
+            const intensity = 0.4 * envelope;
+
+            const accelX = (Math.random() - 0.5) * intensity;
+            const accelY = (Math.random() - 0.5) * intensity;
+            const accelZ = (Math.random() - 0.5) * intensity;
+
+            // FFT: Yüksek frekansta yoğunlaşma (8-10 Hz)
+            const fftSpectrum = this.generateFFTSpectrum(noiseFreq, 0.8, 0.7 * envelope);
+
+            this.liveReadings.set(targetNodeId, {
+                timestamp: Date.now(),
+                accelX,
+                accelY,
+                accelZ,
+                magnitude: Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2),
+                frequency: noiseFreq,
+                fftSpectrum,
+                signalType: 'noise', // AI: Bu deprem değil, gürültü
+            });
+
+            this.emitUpdate();
+
+            if (tickCount >= totalTicks) {
+                clearInterval(noiseInterval);
+                // Normal duruma dön
+                this.liveReadings.set(targetNodeId, this.generateIdleReading(targetNodeId));
+                this.emitUpdate();
+                onFilteredCallback();
+            }
+        }, 50);
     }
 }
 

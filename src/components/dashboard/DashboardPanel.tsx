@@ -14,6 +14,7 @@ const STRUCTURE_LABELS: Record<string, string> = {
 };
 
 import SystemInfoModal from '@/components/SystemInfoModal';
+import FFTChart from '@/components/dashboard/FFTChart';
 
 export default function DashboardPanel() {
     const {
@@ -35,6 +36,8 @@ export default function DashboardPanel() {
     const [activeFilter, setActiveFilter] = useState<CategoryFilter>(null);
     const [liveReading, setLiveReading] = useState<SensorReading | null>(null);
     const [isInfoOpen, setIsInfoOpen] = useState(false);
+    const [isTruckActive, setIsTruckActive] = useState(false);
+    const [truckFiltered, setTruckFiltered] = useState(false);
 
     const node = selectedNodeId ? nodes.get(selectedNodeId) : null;
     const damage = selectedNodeId ? buildingDamages.get(selectedNodeId) : null;
@@ -101,6 +104,21 @@ export default function DashboardPanel() {
         resetToSafe();
         setCanReset(false);
         setActiveFilter(null);
+        setTruckFiltered(false);
+    };
+
+    // Kamyon Gürültüsü Simülasyonu
+    const handleTruckNoise = () => {
+        if (!selectedNodeId || isTruckActive || isEarthquakeActive) return;
+        setIsTruckActive(true);
+        setTruckFiltered(false);
+
+        earthquakeSimulator.triggerTruckNoise(selectedNodeId, () => {
+            setIsTruckActive(false);
+            setTruckFiltered(true);
+            // 3 saniye sonra mesajı kaldır
+            setTimeout(() => setTruckFiltered(false), 3000);
+        });
     };
 
     const getScoreColor = (score: number) => {
@@ -159,6 +177,21 @@ export default function DashboardPanel() {
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                             Deprem Simüle Et
                         </button>
+                        {selectedNodeId && (
+                            <button
+                                onClick={handleTruckNoise}
+                                disabled={isTruckActive || isEarthquakeActive}
+                                className="w-full py-2 px-4 bg-amber-600/80 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                <span className="text-lg">🚛</span>
+                                {isTruckActive ? 'Kamyon Geçiyor...' : 'Kamyon Geçişi (Gürültü Testi)'}
+                            </button>
+                        )}
+                        {truckFiltered && (
+                            <div className="p-2 bg-emerald-900/30 border border-emerald-500/30 rounded-lg text-center">
+                                <span className="text-emerald-400 text-xs font-medium">✓ AI: Gürültü Filtrelendi (Deprem Değil)</span>
+                            </div>
+                        )}
                         {canReset && (
                             <button onClick={handleReset} className="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
                                 Sıfırla
@@ -336,6 +369,15 @@ export default function DashboardPanel() {
                                 <h3 className="text-slate-400 font-medium text-sm">Sinyal Yok</h3>
                                 <p className="text-slate-500 text-xs mt-1">Sensör verisi alınamıyor.</p>
                             </div>
+                        )}
+
+                        {/* FFT Spektrumu */}
+                        {liveReading && liveReading.fftSpectrum && (
+                            <FFTChart
+                                spectrum={liveReading.fftSpectrum}
+                                signalType={liveReading.signalType}
+                                dominantFrequency={liveReading.frequency}
+                            />
                         )}
                     </div>
                 ) : (
