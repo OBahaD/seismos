@@ -15,6 +15,8 @@ const STRUCTURE_LABELS: Record<string, string> = {
 
 import SystemInfoModal from '@/components/SystemInfoModal';
 import FFTChart from '@/components/dashboard/FFTChart';
+import FrequencySparkline from '@/components/dashboard/FrequencySparkline';
+import TriagePanel from '@/components/dashboard/TriagePanel';
 
 export default function DashboardPanel() {
     const {
@@ -38,6 +40,7 @@ export default function DashboardPanel() {
     const [isInfoOpen, setIsInfoOpen] = useState(false);
     const [isTruckActive, setIsTruckActive] = useState(false);
     const [truckFiltered, setTruckFiltered] = useState(false);
+    const [frequencyHistory, setFrequencyHistory] = useState<number[]>([]);
 
     const node = selectedNodeId ? nodes.get(selectedNodeId) : null;
     const damage = selectedNodeId ? buildingDamages.get(selectedNodeId) : null;
@@ -58,7 +61,19 @@ export default function DashboardPanel() {
     useEffect(() => {
         if (selectedNodeId) {
             setLiveReading(earthquakeSimulator.getReading(selectedNodeId));
+            setFrequencyHistory(earthquakeSimulator.getFrequencyHistory(selectedNodeId));
+        } else {
+            setFrequencyHistory([]);
         }
+    }, [selectedNodeId]);
+
+    // Frekans geçmişini periyodik güncelle
+    useEffect(() => {
+        if (!selectedNodeId) return;
+        const interval = setInterval(() => {
+            setFrequencyHistory(earthquakeSimulator.getFrequencyHistory(selectedNodeId));
+        }, 1000); // Her saniye güncelle
+        return () => clearInterval(interval);
     }, [selectedNodeId]);
 
     const getFilteredBuildings = () => {
@@ -379,6 +394,14 @@ export default function DashboardPanel() {
                                 dominantFrequency={liveReading.frequency}
                             />
                         )}
+
+                        {/* Frekans Trendi (Sparkline) */}
+                        {damage && (
+                            <FrequencySparkline
+                                history={frequencyHistory}
+                                currentDamage={damage.totalScore}
+                            />
+                        )}
                     </div>
                 ) : (
                     <div className="h-full flex items-center justify-center">
@@ -390,6 +413,13 @@ export default function DashboardPanel() {
                             </div>
                             <p className="text-sm text-slate-500">Haritadan bir bina seçin</p>
                         </div>
+                    </div>
+                )}
+
+                {/* Triyaj Paneli - Hasarlı bina varsa göster */}
+                {buildingSummary.damaged + buildingSummary.critical + buildingSummary.collapsed > 0 && !activeFilter && !selectedNodeId && (
+                    <div className="mt-4">
+                        <TriagePanel onSelectBuilding={(id) => selectNode(id)} />
                     </div>
                 )}
             </div>

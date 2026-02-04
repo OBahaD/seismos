@@ -98,6 +98,8 @@ export class EarthquakeSimulator {
     private idleInterval: ReturnType<typeof setInterval> | null = null;
     private deadNodes: Set<string> = new Set();
     private currentDamages: Map<string, number> = new Map(); // Hasar hafızası
+    private frequencyHistory: Map<string, number[]> = new Map(); // Frekans geçmişi (son 50 okuma)
+    private static readonly HISTORY_LENGTH = 50;
 
     // Canlı okuma dinleyicisi ekle
     onLiveUpdate(callback: (readings: Map<string, SensorReading>) => void): () => void {
@@ -185,7 +187,16 @@ export class EarthquakeSimulator {
 
             DEMO_NODES.forEach((node) => {
                 if (!this.deadNodes.has(node.id)) {
-                    this.liveReadings.set(node.id, this.generateIdleReading(node.id));
+                    const reading = this.generateIdleReading(node.id);
+                    this.liveReadings.set(node.id, reading);
+
+                    // Frekans geçmişini kaydet
+                    const history = this.frequencyHistory.get(node.id) || [];
+                    history.push(reading.frequency);
+                    if (history.length > EarthquakeSimulator.HISTORY_LENGTH) {
+                        history.shift(); // FIFO - en eski veriyi sil
+                    }
+                    this.frequencyHistory.set(node.id, history);
                 } else {
                     this.liveReadings.delete(node.id);
                 }
@@ -328,7 +339,14 @@ export class EarthquakeSimulator {
 
     reset(): void {
         this.deadNodes.clear();
+        this.frequencyHistory.clear();
+        this.currentDamages.clear();
         this.startIdleSimulation();
+    }
+
+    // Frekans geçmişini getir (Sparkline için)
+    getFrequencyHistory(nodeId: string): number[] {
+        return this.frequencyHistory.get(nodeId) || [];
     }
 
     // 🚛 Kamyon Geçişi Simülasyonu (Gürültü Testi)

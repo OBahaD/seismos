@@ -3,7 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
 import { useSeismosStore } from '@/lib/store';
+
+// Leaflet.heat için tip genişletmesi
+declare module 'leaflet' {
+    function heatLayer(
+        latlngs: Array<[number, number, number]>,
+        options?: {
+            radius?: number;
+            blur?: number;
+            maxZoom?: number;
+            max?: number;
+            minOpacity?: number;
+            gradient?: Record<number, string>;
+        }
+    ): L.Layer;
+}
 
 // Skora göre renk
 function getColorByScore(score: number): string {
@@ -17,9 +33,11 @@ export default function SeismicMap() {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<Map<string, L.CircleMarker | L.Marker>>(new Map());
+    const heatLayerRef = useRef<L.Layer | null>(null);
 
     const { nodes, selectedNodeId, selectNode, buildingDamages, isEarthquakeActive, consensusEvidence } = useSeismosStore();
     const [isMapReady, setIsMapReady] = useState(false);
+    const [showHeatmap, setShowHeatmap] = useState(false);
 
     // Harita başlat
     useEffect(() => {
@@ -170,6 +188,59 @@ export default function SeismicMap() {
         };
     }, [nodes, selectedNodeId, buildingDamages, isMapReady, selectNode, consensusEvidence]);
 
+    // Heatmap layer
+    useEffect(() => {
+        if (!mapRef.current || !isMapReady) return;
+
+        const map = mapRef.current;
+
+        // Önce eski layer'ı temizle
+        if (heatLayerRef.current) {
+            map.removeLayer(heatLayerRef.current);
+            heatLayerRef.current = null;
+        }
+
+        if (!showHeatmap) return;
+
+        // Heatmap verisi oluştur
+        const heatData: Array<[number, number, number]> = [];
+        nodes.forEach((node, nodeId) => {
+            const damage = buildingDamages.get(nodeId);
+            const score = damage?.totalScore || 0;
+            // Skoru 0-1 arasına normalize et
+            const intensity = score / 100;
+            heatData.push([node.lat, node.lng, intensity]);
+        });
+
+        if (heatData.length === 0) return;
+
+        // Heatmap layer oluştur
+        const heat = L.heatLayer(heatData, {
+            radius: 40,
+            blur: 30,
+            maxZoom: 17,
+            max: 1.0,
+            minOpacity: 0.3,
+            gradient: {
+                0.0: 'rgba(16, 185, 129, 0)',
+                0.2: '#10b981',  // Yeşil - Güvenli
+                0.4: '#eab308',  // Sarı - Hasarlı
+                0.6: '#f97316',  // Turuncu - Ağır
+                0.8: '#ef4444',  // Kırmızı - Yıkık
+                1.0: '#7f1d1d',  // Koyu Kırmızı
+            },
+        });
+
+        heat.addTo(map);
+        heatLayerRef.current = heat;
+
+        return () => {
+            if (heatLayerRef.current) {
+                map.removeLayer(heatLayerRef.current);
+            }
+        };
+    }, [nodes, buildingDamages, isMapReady, showHeatmap]);
+
     return (
         <div className="relative w-full h-full">
             <div ref={mapContainerRef} className="w-full h-full" />
@@ -180,6 +251,21 @@ export default function SeismicMap() {
                     <span className="text-white font-medium text-sm">Deprem Aktif</span>
                 </div>
             )}
+
+            {/* Heatmap Toggle Button */}
+            <button
+                onClick={() => setShowHeatmap(!showHeatmap)}
+                className={`absolute top-4 right-4 px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 backdrop-blur-sm ${showHeatmap
+                        ? 'bg-orange-500/90 text-white'
+                        : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
+                    }`}
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+                </svg>
+                {showHeatmap ? 'Isı Haritası Açık' : 'Isı Haritası'}
+            </button>
 
             <style jsx global>{`
                 .collapsed-marker {
